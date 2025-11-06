@@ -4,17 +4,18 @@ import com.atscrawler.config.CrawlerProperties;
 import com.atscrawler.model.Job;
 import com.atscrawler.util.Http;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Teamtailor fetcher - uses public JSON API.
+ * API docs: https://docs.teamtailor.com/#jobs
+ * No authentication required for public job listings.
+ */
 @Component
-public class TeamtailorFetcher extends HybridJsonHtmlFetcher {
-
+public class TeamtailorFetcher extends AbstractJsonFetcher {
     private final CrawlerProperties props;
 
     public TeamtailorFetcher(CrawlerProperties props, Http http) {
@@ -23,30 +24,51 @@ public class TeamtailorFetcher extends HybridJsonHtmlFetcher {
     }
 
     @Override
-    protected List<String> getCompanySlugs() { return props.getTeamtailorCompanies(); }
-
-    @Override
-    protected String buildUrl(String companySlug) {
-        return "https://" + companySlug + ".teamtailor.com/jobs";
+    protected List<String> getCompanySlugs() {
+        return props.getTeamtailorCompanies();
     }
 
     @Override
-    protected List<Job> parseJson(String company, JsonNode root) { return new ArrayList<>(); }
+    protected String buildUrl(String companySlug) {
+        // Teamtailor public API - no auth required
+        return "https://career.teamtailor.com/api/v1/jobs?company=" + companySlug;
+    }
 
     @Override
-    protected List<Job> parseHtml(String company, Document doc) {
+    protected List<Job> parseJobs(String company, JsonNode root) {
         List<Job> out = new ArrayList<>();
-        Elements jobs = doc.select("a.career-site-job");
-        for (Element e : jobs) {
-            String title = e.text();
-            String href = e.absUrl("href");
-            if (title.isBlank()) continue;
-            Job j = new Job("Teamtailor", company, title, href);
-            out.add(j);
+        JsonNode data = root.path("data");
+
+        if (!data.isArray()) {
+            log.warn("⚠️ Teamtailor ({}) - unexpected JSON structure", company);
+            return out;
         }
+
+        for (JsonNode j : data) {
+            JsonNode attrs = j.path("attributes");
+            JsonNode links = j.path("links");
+
+            String title = attrs.path("title").asText("");
+            String url = links.path("careersite-job-url").asText("");
+
+            if (title.isBlank() || url.isBlank()) continue;
+
+            Job job = new Job("Teamtailor", company, title, url);
+
+            // Extract location
+            String location = attrs.path("location").asText("");
+            if (!location.isBlank()) {
+                job.setNotes(location);
+            }
+
+            out.add(job);
+        }
+
         return out;
     }
 
     @Override
-    public String getSourceName() { return "Teamtailor"; }
+    public String getSourceName() {
+        return "Teamtailor";
+    }
 }
