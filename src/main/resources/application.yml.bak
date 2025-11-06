@@ -1,0 +1,53 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ats}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASS:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+
+crawler:
+  cron: ${CRON_EXPRESSION:0 0 7 * * *}
+  zone: ${CRON_ZONE:UTC}
+  expiryDays: ${EXPIRY_DAYS:15}
+  greenhouse-companies: ${ATS_GREENHOUSE:}
+  lever-companies: ${ATS_LEVER:}
+  workable-companies: ${ATS_WORKABLE:}
+  recruitee-companies: ${ATS_RECRUITEE:}
+  ashby-companies: ${ATS_ASHBY:}
+  breezy-companies: ${ATS_BREEZY:}
+  zoho-companies: ${ATS_ZOHO:}
+  jobvite-companies: ${ATS_JOBVITE:}
+  taleo-companies: ${ATS_TALEO:}
+  rippling-companies: ${ATS_RIPPLING:}
+  bamboohr-companies: ${ATS_BAMBOOHR:}
+  recruitcrm-companies: ${ATS_RECRUITCRM:}
+  teamtailor-companies: ${ATS_TEAMTAILOR:}
+  jobsoid-companies: ${ATS_JOBSOID:}
+  talentlyft-companies: ${ATS_TALENTLYFT:}
+  hundredHires-companies: ${ATS_100HIRES:}
+  recruiteze-companies: ${ATS_RECRUITEZE:}
+  kula-companies: ${ATS_KULA:}
+  ismart-companies: ${ATS_ISMART:}
+  vincere-companies: ${ATS_VINCERE:}
+
+filter:
+  include-keywords: ${INCLUDE_KEYWORDS:remote,work from anywhere,latam,brazil,latin america}
+  exclude-keywords: ${EXCLUDE_KEYWORDS:us only,usa only,united states only,on-site,onsite}
+  role-keywords: ${ROLE_KEYWORDS:java,spring,spring boot,microservices}
+
+discord:
+  webhook: ${DISCORD_WEBHOOK:}
+
+sheets:
+  enabled: ${SHEETS_ENABLED:false}
+  spreadsheetId: ${GOOGLE_SHEETS_ID:}
+google:
+  credentials: ${GOOGLE_APPLICATION_CREDENTIALS:/app/credentials.json}
