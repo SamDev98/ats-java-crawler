@@ -22,7 +22,9 @@ import java.util.UUID;
         @Index(name = "idx_jobs_url", columnList = "url", unique = true),
         @Index(name = "idx_jobs_active", columnList = "is_active"),
         @Index(name = "idx_jobs_last_seen", columnList = "last_seen"),
-        @Index(name = "idx_jobs_source", columnList = "source")
+        @Index(name = "idx_jobs_source", columnList = "source"),
+        @Index(name = "idx_jobs_active_last_seen", columnList = "is_active, last_seen"),
+        @Index(name = "idx_jobs_company_title", columnList = "company, title")
 })
 public class Job {
 

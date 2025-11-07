@@ -16,24 +16,29 @@ public class JobFilters {
     }
 
     public boolean matches(Job job) {
-        // Combina título + URL + notas (onde pode vir a localização)
+        // Combina título + URL + notas (location vem aqui)
         String text = (job.getTitle() + " " + job.getUrl() + " " +
                 (job.getNotes() == null ? "" : job.getNotes())).toLowerCase();
 
-        boolean include = props.getIncludeKeywords().isEmpty()
-                || props.getIncludeKeywords().stream().anyMatch(text::contains);
-
-        boolean role = props.getRoleKeywords().isEmpty()
+        // ✅ DEVE ter pelo menos 1 role keyword (java/spring/kotlin)
+        boolean hasRole = props.getRoleKeywords().isEmpty()
                 || props.getRoleKeywords().stream().anyMatch(text::contains);
 
-        boolean exclude = props.getExcludeKeywords().stream().anyMatch(text::contains);
+        // ✅ Se include keywords estiver VAZIO → passa (assume remote)
+        // Se tiver keywords → deve ter pelo menos 1
+        boolean hasInclude = props.getIncludeKeywords().isEmpty()
+                || props.getIncludeKeywords().stream().anyMatch(text::contains);
 
-        boolean result = (include || role) && !exclude;
+        // ❌ NÃO DEVE ter nenhum exclude keyword
+        boolean hasExclude = props.getExcludeKeywords().stream().anyMatch(text::contains);
 
-        if (!result) {
-            log.debug("❌ Rejected: {} | {}", job.getTitle(), text);
-        } else {
-            log.debug("✅ Accepted: {} | {}", job.getTitle(), text);
+        // ✅ CORREÇÃO: Agora requer ROLE + opcionalmente INCLUDE, mas nunca EXCLUDE
+        boolean result = hasRole && hasInclude && !hasExclude;
+
+        // Debug: Log primeiras 10 rejeições de vagas Java
+        if (hasRole && !result) {
+            log.debug("❌ Java job rejected: {} | Include:{} Exclude:{}",
+                    job.getTitle(), hasInclude, hasExclude);
         }
 
         return result;

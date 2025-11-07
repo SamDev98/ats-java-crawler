@@ -18,6 +18,7 @@
         <spring-boot.version>3.3.4</spring-boot.version>
         <jsoup.version>1.17.2</jsoup.version>
         <httpclient5.version>5.3.1</httpclient5.version>
+        <google-cloud-bom.version>26.50.0</google-cloud-bom.version>
     </properties>
 
     <dependencyManagement>
@@ -26,6 +27,15 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Google Cloud BOM -->
+            <dependency>
+                <groupId>com.google.cloud</groupId>
+                <artifactId>libraries-bom</artifactId>
+                <version>${google-cloud-bom.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -69,26 +79,30 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- ✅ GOOGLE SHEETS - VERSÕES COMPATÍVEIS -->
+        <!-- ✅ Google APIs (versões gerenciadas por BOM) -->
         <dependency>
             <groupId>com.google.api-client</groupId>
             <artifactId>google-api-client</artifactId>
-            <version>2.7.0</version>
         </dependency>
         <dependency>
             <groupId>com.google.oauth-client</groupId>
             <artifactId>google-oauth-client-jetty</artifactId>
-            <version>1.36.0</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.apis</groupId>
-            <artifactId>google-api-services-sheets</artifactId>
-            <version>v4-rev20240826-2.0.0</version> <!-- ✅ COMPATÍVEL COM 2.7.0 -->
         </dependency>
         <dependency>
             <groupId>com.google.auth</groupId>
             <artifactId>google-auth-library-oauth2-http</artifactId>
-            <version>1.33.0</version>
+        </dependency>
+
+        <!-- ✅ API Services - VERSÕES CORRETAS -->
+        <dependency>
+            <groupId>com.google.apis</groupId>
+            <artifactId>google-api-services-sheets</artifactId>
+            <version>v4-rev20240826-2.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.apis</groupId>
+            <artifactId>google-api-services-drive</artifactId>
+            <version>v3-rev20240914-2.0.0</version>
         </dependency>
 
         <!-- Jsoup -->

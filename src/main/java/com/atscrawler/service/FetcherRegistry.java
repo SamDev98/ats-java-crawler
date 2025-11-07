@@ -44,7 +44,9 @@ public class FetcherRegistry {
         log.info("🌐 Starting parallel fetch from {} sources...", fetchers.size());
 
         List<Job> allJobs = new CopyOnWriteArrayList<>();
-        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+        ExecutorService executor = threadPoolSize > 0
+                ? Executors.newFixedThreadPool(threadPoolSize)
+                : Executors.newVirtualThreadPerTaskExecutor();
         List<Future<FetchResult>> futures = new ArrayList<>();
 
         // Submit all fetchers
@@ -89,15 +91,32 @@ public class FetcherRegistry {
      * Safely execute a fetcher with error handling.
      */
     private FetchResult fetchSafely(JobFetcher fetcher) {
+        long start = System.currentTimeMillis();
+        int maxRetries = 2;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                log.debug("🌐 Attempt {}/{} for {}...", attempt, maxRetries, fetcher.getSourceName());
+                List<Job> jobs = fetcher.fetch();
+                long duration = System.currentTimeMillis() - start;
+                log.info("⏱️ {} completed in {}ms ({} jobs)", fetcher.getSourceName(), duration, jobs.size());
+                return new FetchResult(fetcher.getSourceName(), jobs, null, true);            } catch (Exception e) {
+                if (attempt < maxRetries) {
+                    log.warn("⚠️ Retry {}/{} for {}: {}", attempt, maxRetries, fetcher.getSourceName(), e.getMessage());
+                    sleep(2000L * attempt); // backoff
+                } else {
+                    log.error("❌ All retries failed for {}: {}", fetcher.getSourceName(), e.getMessage());
+                    return new FetchResult(fetcher.getSourceName(), new ArrayList<>(), e.getMessage(), false);
+                }
+            }
+        }
+        return new FetchResult(fetcher.getSourceName(), new ArrayList<>(), "Unknown error", false);
+    }
+
+    private void sleep(long millis) {
         try {
-            log.debug("🌐 Starting fetch from {}...", fetcher.getSourceName());
-            List<Job> jobs = fetcher.fetch();
-            return new FetchResult(fetcher.getSourceName(), jobs, null, true);
-        } catch (Exception e) {
-            log.error("❌ Fetcher {} threw exception: {}",
-                    fetcher.getSourceName(), e.getMessage(), e);
-            return new FetchResult(fetcher.getSourceName(), new ArrayList<>(),
-                    e.getMessage(), false);
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -109,5 +128,6 @@ public class FetcherRegistry {
             List<Job> jobs,
             String error,
             boolean success
-    ) {}
+    ) {
+    }
 }

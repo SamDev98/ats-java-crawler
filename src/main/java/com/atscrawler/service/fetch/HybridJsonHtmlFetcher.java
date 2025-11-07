@@ -52,15 +52,23 @@ public abstract class HybridJsonHtmlFetcher implements JobFetcher {
             }
 
             try {
-                // Detect JSON or HTML automatically
                 if (body.trim().startsWith("{") || body.trim().startsWith("[")) {
                     JsonNode json = mapper.readTree(body);
-                    out.addAll(parseJson(company, json));
-                    log.info("✅ {} (JSON) parsed successfully for {}", getSourceName(), company);
+                    List<Job> jobs = parseJson(company, json);
+                    out.addAll(jobs);
+                    log.info("✅ {} (JSON) - {} jobs from {}", getSourceName(), jobs.size(), company);
                 } else {
                     Document doc = Jsoup.parse(body, url);
-                    out.addAll(parseHtml(company, doc));
-                    log.info("✅ {} (HTML) parsed successfully for {}", getSourceName(), company);
+                    List<Job> jobs = parseHtml(company, doc);
+
+                    // ⬇️ ADICIONE ESTE LOG
+                    if (jobs.isEmpty()) {
+                        log.warn("⚠️ {} (HTML) - ZERO jobs parsed from {} - Check selectors or page structure changed",
+                                getSourceName(), company);
+                    }
+
+                    out.addAll(jobs);
+                    log.info("✅ {} (HTML) - {} jobs from {}", getSourceName(), jobs.size(), company);
                 }
 
                 out.forEach(j -> {

@@ -22,4 +22,7 @@ public class DiscordNotifier {
       rest.postForEntity(webhook, new HttpEntity<>(Map.of("content", msg), h), String.class);
     } catch (Exception e) { log.warn("Discord post failed: {}", e.getMessage()); }
   }
+
+    public void send(int newJobs, int updated, int reactivated) {
+    }
 }
