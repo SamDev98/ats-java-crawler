@@ -26,7 +26,7 @@ public class LeverFetcher extends AbstractJsonFetcher {
 
     @Override
     protected String buildUrl(String companySlug) {
-        return "https://api.lever.co/v1/postings/" + companySlug + "?mode=json";
+        return "https://api.lever.co/v0/postings/" + companySlug + "?mode=json";
     }
 
     @Override

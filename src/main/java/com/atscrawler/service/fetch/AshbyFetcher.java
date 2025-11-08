@@ -47,7 +47,7 @@ public class AshbyFetcher extends HybridJsonHtmlFetcher {
 
         // Multiple selectors for robustness
         Elements jobs = doc.select(
-                "a[href*='/jobs/'], " +
+                "a.job-link, [data-job-id], " +
                         ".ashby-job-posting-brief-list a, " +
                         "[class*='JobPosting'] a"
         );

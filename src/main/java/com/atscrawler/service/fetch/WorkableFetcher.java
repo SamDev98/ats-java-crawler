@@ -22,7 +22,7 @@ public class WorkableFetcher extends AbstractJsonFetcher {
 
     @Override
     protected String buildUrl(String companySlug) {
-        return "https://apply.workable.com/api/v3/accounts/" + companySlug + "/jobs";
+        return "https://apply.workable.com/api/v1/accounts/" + companySlug + "/jobs";
     }
 
     @Override

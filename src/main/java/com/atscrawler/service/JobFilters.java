@@ -15,32 +15,25 @@ public class JobFilters {
         this.props = props;
     }
 
+    // JobFilters.java - REPLACE método matches()
     public boolean matches(Job job) {
-        // Combina título + URL + notas (location vem aqui)
         String text = (job.getTitle() + " " + job.getUrl() + " " +
                 (job.getNotes() == null ? "" : job.getNotes())).toLowerCase();
 
-        // ✅ DEVE ter pelo menos 1 role keyword (java/spring/kotlin)
-        boolean hasRole = props.getRoleKeywords().isEmpty()
-                || props.getRoleKeywords().stream().anyMatch(text::contains);
+        // ✅ NÍVEL 1: OBRIGATÓRIO ter keyword Java
+        boolean hasJava = props.getRoleKeywords().stream().anyMatch(text::contains);
+        if (!hasJava) return false;
 
-        // ✅ Se include keywords estiver VAZIO → passa (assume remote)
-        // Se tiver keywords → deve ter pelo menos 1
-        boolean hasInclude = props.getIncludeKeywords().isEmpty()
-                || props.getIncludeKeywords().stream().anyMatch(text::contains);
+        // ✅ NÍVEL 2: OBRIGATÓRIO ser remote-friendly
+        boolean hasRemote = props.getIncludeKeywords().isEmpty()
+                ? text.matches(".*(remote|wfh|work from home|anywhere|latam|brazil).*")
+                : props.getIncludeKeywords().stream().anyMatch(text::contains);
+        if (!hasRemote) return false;
 
-        // ❌ NÃO DEVE ter nenhum exclude keyword
-        boolean hasExclude = props.getExcludeKeywords().stream().anyMatch(text::contains);
+        // ✅ NÍVEL 3: BLOQUEAR excludes
+        boolean hasExclude = props.getExcludeKeywords().stream()
+                .anyMatch(text::contains);
 
-        // ✅ CORREÇÃO: Agora requer ROLE + opcionalmente INCLUDE, mas nunca EXCLUDE
-        boolean result = hasRole && hasInclude && !hasExclude;
-
-        // Debug: Log primeiras 10 rejeições de vagas Java
-        if (hasRole && !result) {
-            log.debug("❌ Java job rejected: {} | Include:{} Exclude:{}",
-                    job.getTitle(), hasInclude, hasExclude);
-        }
-
-        return result;
+        return !hasExclude;
     }
 }
