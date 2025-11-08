@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 public class ATSCompanyLoader {
     private static final Logger log = LoggerFactory.getLogger(ATSCompanyLoader.class);
 
-    @Value("${crawler.ats-csv:./ats_results/found_ats.csv}")
+    @Value("${crawler.ats-csv:C:/Users/SammyJr/dev/ats_discover/ats_results/found_ats.csv}")
     private String csvPath;
 
     private final CrawlerProperties crawlerProps;
@@ -71,8 +71,7 @@ public class ATSCompanyLoader {
                 String url = parts[1].trim();
                 String ats = parts[2].trim();
 
-                String slug = extractSlug(company, url, ats);
-                if (slug == null) continue;
+                String slug = extractSlug(company, url);
 
                 result.computeIfAbsent(ats, k -> new ArrayList<>()).add(slug);
             }
@@ -84,7 +83,7 @@ public class ATSCompanyLoader {
     /**
      * Extract ATS slug from company name or URL.
      */
-    private String extractSlug(String company, String url, String ats) {
+    private String extractSlug(String company, String url) {
         // Try URL patterns first
         if (url.contains("greenhouse.io/")) {
             return url.replaceAll(".*/boards/([^/]+).*", "$1");

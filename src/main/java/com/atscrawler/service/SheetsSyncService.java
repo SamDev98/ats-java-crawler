@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 public class SheetsSyncService {
     private static final Logger log = LoggerFactory.getLogger(SheetsSyncService.class);
     private final JobRepository repo;
+    private final JobFilters filters;  // ✅ ADICIONAR
 
     @Value("${sheets.enabled:false}") private boolean enabled;
     @Value("${sheets.spreadsheetId:}") private String spreadsheetId;
@@ -39,8 +40,10 @@ public class SheetsSyncService {
             "Company", "Title", "Source", "URL", "First Seen", "Last Seen", "Active", "Status", "Notes"
     );
 
-    public SheetsSyncService(JobRepository repo) {
+    // ✅ ADICIONAR JobFilters no construtor
+    public SheetsSyncService(JobRepository repo, JobFilters filters) {
         this.repo = repo;
+        this.filters = filters;
     }
 
     @PostConstruct
@@ -173,6 +176,7 @@ public class SheetsSyncService {
     /**
      * Push ONLY NEW jobs to Sheets.
      * Compares with existing sheet data to avoid duplicates.
+     * ✅ APPLIES FILTERS to ensure only Java remote jobs are synced.
      */
     public void pushJobsToSheet() {
         if (!enabled || spreadsheetId.isBlank()) return;
@@ -184,9 +188,11 @@ public class SheetsSyncService {
             Set<String> existingUrls = getExistingUrlsFromSheet(sheets);
             log.info("📊 Found {} existing jobs in sheet", existingUrls.size());
 
-            // ✅ STEP 2: Get NEW jobs from last 7 days
+            // ✅ STEP 2: Get NEW jobs from last 7 days + APPLY FILTERS
             LocalDate weekAgo = LocalDate.now().minusDays(7);
-            List<Job> recentJobs = repo.findByActiveTrueAndFirstSeenAfter(weekAgo);
+            List<Job> recentJobs = repo.findByActiveTrueAndFirstSeenAfter(weekAgo).stream()
+                    .filter(filters::matches)  // ✅ FILTRO APLICADO AQUI
+                    .toList();
 
             // ✅ STEP 3: Filter out already-existing jobs
             List<Job> newJobs = recentJobs.stream()
@@ -198,7 +204,7 @@ public class SheetsSyncService {
                 return;
             }
 
-            log.info("✅ Found {} NEW jobs to add", newJobs.size());
+            log.info("✅ Found {} NEW jobs to add (after filters)", newJobs.size());
 
             // ✅ STEP 4: Append new jobs to sheet (don't clear!)
             appendJobsToSheet(sheets, newJobs);
@@ -227,7 +233,7 @@ public class SheetsSyncService {
 
         return vr.getValues().stream()
                 .filter(row -> !row.isEmpty())
-                .map(row -> String.valueOf(row.get(0)))
+                .map(row -> String.valueOf(row.getFirst()))
                 .collect(Collectors.toSet());
     }
 
