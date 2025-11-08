@@ -20,29 +20,46 @@ public class WorkableFetcher extends AbstractJsonFetcher {
     @Override
     protected List<String> getCompanySlugs() { return props.getWorkableCompanies(); }
 
+    // src/main/java/com/atscrawler/service/fetch/WorkableFetcher.java
     @Override
     protected String buildUrl(String companySlug) {
-        return "https://apply.workable.com/api/v1/accounts/" + companySlug + "/jobs";
+        // ✅ FIX: Migrar para API v3
+        return "https://apply.workable.com/api/v3/accounts/" + companySlug + "/jobs";
     }
 
     @Override
     protected List<Job> parseJobs(String company, JsonNode root) {
         List<Job> out = new ArrayList<>();
-        JsonNode jobs = root.path("results");
-        if (!jobs.isArray()) return out;
 
-        for (JsonNode j : jobs) {
-            Job job = new Job();
-            job.setSource("Workable");
-            job.setCompany(company);
-            job.setTitle(j.path("title").asText(""));
-            job.setUrl(j.path("url").asText(""));
-            job.setNotes(j.path("location").path("location_str").asText(""));
+        // ✅ API v3 usa "results" (não "jobs")
+        JsonNode results = root.has("results") ? root.get("results") : root.get("jobs");
+
+        if (results == null || !results.isArray()) {
+            log.warn("⚠️ Workable - Invalid JSON structure for {}", company);
+            return out;
+        }
+
+        for (JsonNode j : results) {
+            String title = j.path("title").asText("");
+            String url = j.path("url").asText("");
+
+            if (title.isBlank() || url.isBlank()) continue;
+
+            Job job = new Job("Workable", company, title, url);
+
+            // Location: v3 usa "location.location_str"
+            String location = j.path("location").path("location_str").asText("");
+            if (location.isBlank()) {
+                location = j.path("location").path("city").asText("");
+            }
+
+            job.setNotes(location);
             out.add(job);
         }
+
+        log.info("✅ Workable ({}) returned {} jobs", company, out.size());
         return out;
     }
-
     @Override
     public String getSourceName() { return "Workable"; }
 }

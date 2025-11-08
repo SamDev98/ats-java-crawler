@@ -4,6 +4,7 @@ import com.atscrawler.config.CrawlerProperties;
 import com.atscrawler.model.Job;
 import com.atscrawler.util.Http;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -32,7 +33,7 @@ public class JobviteFetcher extends HybridJsonHtmlFetcher {
 
     @Override
     protected String buildUrl(String companySlug) {
-        return "https://jobs.jobvite.com/" + companySlug + "/";
+        return "https://jobs.jobvite.com/" + companySlug + "/rss";
     }
 
     @Override
@@ -44,13 +45,30 @@ public class JobviteFetcher extends HybridJsonHtmlFetcher {
     protected List<Job> parseHtml(String company, Document doc) {
         List<Job> out = new ArrayList<>();
 
-        // Multiple selectors for different Jobvite layouts
+        if (doc.select("rss, channel, item").size() > 0) {
+            // Parse como XML
+            Document xmlDoc = Jsoup.parse(doc.html(), "", org.jsoup.parser.Parser.xmlParser());
+
+            xmlDoc.select("item").forEach(item -> {
+                String title = item.select("title").text();
+                String link = item.select("link").text();
+                String desc = item.select("description").text();
+
+                if (!title.isBlank() && !link.isBlank()) {
+                    Job j = new Job("Jobvite", company, title, link);
+                    j.setNotes(desc);
+                    out.add(j);
+                }
+            });
+
+            return out;
+        }
+
+        // Fallback: HTML parsing (código atual)
         Elements jobs = doc.select(
                 "#jv-careersite-listings a, " +
                         ".jv-job-list-item a, " +
-                        ".jv-job-list a, " +
-                        "a[href*='/job/'], " +
-                        ".job-item a"
+                        "a[href*='/job/']"
         );
 
         for (Element e : jobs) {

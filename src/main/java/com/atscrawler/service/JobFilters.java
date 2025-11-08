@@ -16,21 +16,25 @@ public class JobFilters {
     }
 
     // JobFilters.java - REPLACE método matches()
+// src/main/java/com/atscrawler/service/JobFilters.java
     public boolean matches(Job job) {
         String text = (job.getTitle() + " " + job.getUrl() + " " +
                 (job.getNotes() == null ? "" : job.getNotes())).toLowerCase();
 
-        // ✅ NÍVEL 1: OBRIGATÓRIO ter keyword Java
-        boolean hasJava = props.getRoleKeywords().stream().anyMatch(text::contains);
+        // ✅ NÍVEL 1: Word boundary para "java" (evita "javascript")
+        boolean hasJava = props.getRoleKeywords().stream()
+                .anyMatch(kw -> text.matches(".*\\b" + kw + "\\b.*"));  // ← FIX AQUI
+
         if (!hasJava) return false;
 
-        // ✅ NÍVEL 2: OBRIGATÓRIO ser remote-friendly
+        // NÍVEL 2: Remote-friendly (mantém igual)
         boolean hasRemote = props.getIncludeKeywords().isEmpty()
                 ? text.matches(".*(remote|wfh|work from home|anywhere|latam|brazil).*")
                 : props.getIncludeKeywords().stream().anyMatch(text::contains);
+
         if (!hasRemote) return false;
 
-        // ✅ NÍVEL 3: BLOQUEAR excludes
+        // NÍVEL 3: Exclude keywords (mantém igual)
         boolean hasExclude = props.getExcludeKeywords().stream()
                 .anyMatch(text::contains);
 

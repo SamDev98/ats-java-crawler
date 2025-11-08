@@ -1,6 +1,7 @@
 package com.atscrawler.service;
 
 import com.atscrawler.config.CrawlerProperties;
+import com.atscrawler.util.Http;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,14 +21,16 @@ import java.util.stream.Collectors;
 @Service
 public class ATSCompanyLoader {
     private static final Logger log = LoggerFactory.getLogger(ATSCompanyLoader.class);
+    private final Http http;
 
     @Value("${crawler.ats-csv:C:/Users/SammyJr/dev/ats_discover/ats_results/found_ats.csv}")
     private String csvPath;
 
     private final CrawlerProperties crawlerProps;
 
-    public ATSCompanyLoader(CrawlerProperties crawlerProps) {
+    public ATSCompanyLoader(CrawlerProperties crawlerProps, Http http) {
         this.crawlerProps = crawlerProps;
+        this.http = http;
     }
 
     /**
@@ -183,5 +186,21 @@ public class ATSCompanyLoader {
         }
 
         return result;
+    }
+
+    private String detectRealATS(String company, String url) {
+        // Para BambooHR, tentar detectar o ATS real
+        if (url.contains("bamboohr.com")) {
+            String html = http.get(url);
+
+            if (html != null) {
+                if (html.contains("greenhouse.io")) return "Greenhouse";
+                if (html.contains("lever.co")) return "Lever";
+                if (html.contains("ashbyhq.com")) return "Ashby";
+                if (html.contains("workable.com")) return "Workable";
+            }
+        }
+
+        return "BambooHR"; // Fallback
     }
 }

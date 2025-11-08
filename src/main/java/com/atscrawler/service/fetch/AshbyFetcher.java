@@ -41,32 +41,39 @@ public class AshbyFetcher extends HybridJsonHtmlFetcher {
         return new ArrayList<>();
     }
 
+    // src/main/java/com/atscrawler/service/fetch/AshbyFetcher.java
     @Override
     protected List<Job> parseHtml(String company, Document doc) {
         List<Job> out = new ArrayList<>();
 
-        // Multiple selectors for robustness
+        // ✅ SELETORES ATUALIZADOS (2024) - múltiplos fallbacks
         Elements jobs = doc.select(
-                "a.job-link, [data-job-id], " +
-                        ".ashby-job-posting-brief-list a, " +
-                        "[class*='JobPosting'] a"
+                "a[href*='/applications/'], " +      // Padrão 2024
+                        "a[href*='/jobs/'], " +               // Alternativo
+                        "div[class*='JobsList'] a, " +        // Grid container
+                        "div[class*='ashby-job'] a, " +       // Legacy
+                        "a[class*='JobPosting'] a, " +        // CSS Modules
+                        ".job-link, [data-job-id]"            // Fallback genérico
         );
 
         for (Element e : jobs) {
             String href = e.absUrl("href");
-            if (!href.contains("/jobs/") || href.isBlank()) continue;
-
-            // Try multiple title selectors
-            String title = e.select(".ashby-job-posting-title, [class*='Title']").text();
-            if (title.isBlank()) {
-                title = e.text();
+            if (href.isBlank()) {
+                href = "https://jobs.ashbyhq.com" + e.attr("href");
             }
 
-            if (title.isBlank()) continue;
+            // Validar URL contém ashbyhq
+            if (!href.contains("ashbyhq.com") || href.isBlank()) continue;
+
+            String title = e.select(".ashby-job-posting-title, [class*='Title']").text();
+            if (title.isBlank()) {
+                title = e.text().trim();
+            }
+
+            if (title.isBlank() || title.length() > 200) continue;
 
             Job j = new Job("Ashby", company, title, href);
 
-            // Extract location if available
             String location = e.select(".ashby-job-posting-location, [class*='Location']").text();
             if (!location.isBlank()) {
                 j.setNotes(location);
@@ -77,7 +84,6 @@ public class AshbyFetcher extends HybridJsonHtmlFetcher {
 
         return out;
     }
-
     @Override
     public String getSourceName() {
         return "Ashby";
