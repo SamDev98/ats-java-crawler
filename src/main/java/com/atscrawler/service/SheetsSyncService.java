@@ -18,6 +18,7 @@ import java.io.FileInputStream;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Production-grade Google Sheets sync service.
@@ -120,7 +121,7 @@ public class SheetsSyncService {
 
         boolean headerMissing = vr.getValues() == null ||
                 vr.getValues().isEmpty() ||
-                vr.getValues().get(0).size() < 9;
+                vr.getValues().getFirst().size() < 9;
 
         if (headerMissing) {
             log.warn("⚠️  Header missing, creating...");
@@ -170,8 +171,8 @@ public class SheetsSyncService {
     }
 
     /**
-     * Push all jobs from DB to Sheets.
-     * Maintains full control over sheet structure and formatting.
+     * Push ONLY NEW jobs to Sheets.
+     * Compares with existing sheet data to avoid duplicates.
      */
     public void pushJobsToSheet() {
         if (!enabled || spreadsheetId.isBlank()) return;
@@ -179,49 +180,119 @@ public class SheetsSyncService {
         try {
             Sheets sheets = client();
 
-            // Clear existing data
-            sheets.spreadsheets().values()
-                    .clear(spreadsheetId, TAB + "!A2:I1000000", new ClearValuesRequest())
-                    .execute();
+            // ✅ STEP 1: Get existing URLs from sheet
+            Set<String> existingUrls = getExistingUrlsFromSheet(sheets);
+            log.info("📊 Found {} existing jobs in sheet", existingUrls.size());
 
-            // ✅ MUDANÇA CRÍTICA: Sincronize APENAS vagas ATIVAS
-            List<Job> activeJobs = repo.findByActiveTrue();  // ← Era repo.findAll()
+            // ✅ STEP 2: Get NEW jobs from last 7 days
+            LocalDate weekAgo = LocalDate.now().minusDays(7);
+            List<Job> recentJobs = repo.findByActiveTrueAndFirstSeenAfter(weekAgo);
 
-            if (activeJobs.isEmpty()) {
-                log.info("📊 No active jobs to sync");
+            // ✅ STEP 3: Filter out already-existing jobs
+            List<Job> newJobs = recentJobs.stream()
+                    .filter(job -> !existingUrls.contains(job.getUrl()))
+                    .collect(Collectors.toList());
+
+            if (newJobs.isEmpty()) {
+                log.info("📊 No new jobs to add");
                 return;
             }
 
-            // Write jobs
-            DateTimeFormatter fmt = DateTimeFormatter.ISO_DATE;
-            List<List<Object>> rows = activeJobs.stream().map(j -> {
-                List<Object> r = new ArrayList<>();
-                r.add(j.getCompany());
-                r.add(j.getTitle());
-                r.add(j.getSource());
-                r.add(j.getUrl());
-                r.add(j.getFirstSeen() != null ? fmt.format(j.getFirstSeen()) : "");
-                r.add(j.getLastSeen() != null ? fmt.format(j.getLastSeen()) : "");
-                r.add(j.isActive() ? "TRUE" : "FALSE");
-                r.add(j.getStatus());
-                r.add(Objects.toString(j.getNotes(), ""));
-                return r;
-            }).toList();
+            log.info("✅ Found {} NEW jobs to add", newJobs.size());
 
-            sheets.spreadsheets().values()
-                    .update(spreadsheetId, TAB + "!A2",
-                            new ValueRange().setValues(rows))
-                    .setValueInputOption("RAW")
-                    .execute();
+            // ✅ STEP 4: Append new jobs to sheet (don't clear!)
+            appendJobsToSheet(sheets, newJobs);
 
-            // Apply formatting
-            formatSheet(sheets, activeJobs);  // ← Passa activeJobs em vez de repo.findAll()
+            // ✅ STEP 5: Apply formatting
+            formatSheet(sheets, getAllJobsFromSheet(sheets));
 
-            log.info("✅ Synced {} active jobs to Google Sheets", activeJobs.size());
+            log.info("✅ Added {} new jobs to Google Sheets", newJobs.size());
 
         } catch (Exception e) {
-            log.error("❌ Failed to sync to Sheets: {}", e.getMessage());
+            log.error("❌ Failed to sync: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Get all existing job URLs from sheet.
+     */
+    private Set<String> getExistingUrlsFromSheet(Sheets sheets) throws Exception {
+        ValueRange vr = sheets.spreadsheets().values()
+                .get(spreadsheetId, TAB + "!D2:D1000000") // Column D = URL
+                .execute();
+
+        if (vr.getValues() == null) {
+            return new HashSet<>();
+        }
+
+        return vr.getValues().stream()
+                .filter(row -> !row.isEmpty())
+                .map(row -> String.valueOf(row.get(0)))
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Append jobs to the END of the sheet (no clear).
+     */
+    private void appendJobsToSheet(Sheets sheets, List<Job> jobs) throws Exception {
+        DateTimeFormatter fmt = DateTimeFormatter.ISO_DATE;
+
+        List<List<Object>> rows = jobs.stream().map(j -> {
+            List<Object> r = new ArrayList<>();
+            r.add(j.getCompany());
+            r.add(j.getTitle());
+            r.add(j.getSource());
+            r.add(j.getUrl());
+            r.add(j.getFirstSeen() != null ? fmt.format(j.getFirstSeen()) : "");
+            r.add(j.getLastSeen() != null ? fmt.format(j.getLastSeen()) : "");
+            r.add(j.isActive() ? "TRUE" : "FALSE");
+            r.add(j.getStatus());
+            r.add(Objects.toString(j.getNotes(), ""));
+            return r;
+        }).toList();
+
+        // ✅ APPEND (não UPDATE) para não sobrescrever
+        sheets.spreadsheets().values()
+                .append(spreadsheetId, TAB + "!A2",
+                        new ValueRange().setValues(rows))
+                .setValueInputOption("RAW")
+                .setInsertDataOption("INSERT_ROWS") // ← Insere novas linhas
+                .execute();
+    }
+
+    /**
+     * Get all jobs from sheet (for formatting).
+     */
+    private List<Job> getAllJobsFromSheet(Sheets sheets) throws Exception {
+        ValueRange vr = sheets.spreadsheets().values()
+                .get(spreadsheetId, TAB + "!A2:I1000000")
+                .execute();
+
+        if (vr.getValues() == null) {
+            return new ArrayList<>();
+        }
+
+        List<Job> jobs = new ArrayList<>();
+        DateTimeFormatter fmt = DateTimeFormatter.ISO_DATE;
+
+        for (List<Object> row : vr.getValues()) {
+            if (row.size() < 4) continue;
+
+            Job j = new Job(
+                    String.valueOf(row.get(2)), // source
+                    String.valueOf(row.get(0)), // company
+                    String.valueOf(row.get(1)), // title
+                    String.valueOf(row.get(3))  // url
+            );
+
+            if (row.size() > 4 && !String.valueOf(row.get(4)).isBlank()) {
+                j.setFirstSeen(LocalDate.parse(String.valueOf(row.get(4)), fmt));
+            }
+
+            jobs.add(j);
+        }
+
+        return jobs;
     }
 
     /**

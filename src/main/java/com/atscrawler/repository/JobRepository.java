@@ -13,5 +13,7 @@ public interface JobRepository extends JpaRepository<Job, UUID> {
 
     List<Job> findByActiveTrueAndLastSeenBefore(LocalDate date);
 
+    List<Job> findByActiveTrueAndFirstSeenAfter(LocalDate date);
+
     long countByActiveTrue();
 }
