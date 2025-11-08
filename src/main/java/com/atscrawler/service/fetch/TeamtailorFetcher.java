@@ -30,10 +30,13 @@ public class TeamtailorFetcher extends AbstractJsonFetcher {
 
     @Override
     protected String buildUrl(String companySlug) {
-        // ✅ FIX: Detectar se é domínio completo (loft.teamtailor.com) ou slug (loft)
+        // ✅ FIX: Detectar se é domínio completo ou slug simples
         if (companySlug.contains(".teamtailor.com")) {
+            // Formato: loft.teamtailor.com
             return "https://" + companySlug + "/api/v1/jobs";
         }
+
+        // Fallback: Slug simples (pode não funcionar)
         return "https://career.teamtailor.com/api/v1/jobs?company=" + companySlug;
     }
 

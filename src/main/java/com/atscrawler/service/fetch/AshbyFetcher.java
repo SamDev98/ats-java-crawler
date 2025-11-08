@@ -41,19 +41,17 @@ public class AshbyFetcher extends HybridJsonHtmlFetcher {
         return new ArrayList<>();
     }
 
-    // src/main/java/com/atscrawler/service/fetch/AshbyFetcher.java
     @Override
     protected List<Job> parseHtml(String company, Document doc) {
         List<Job> out = new ArrayList<>();
 
-        // ✅ SELETORES ATUALIZADOS (2024) - múltiplos fallbacks
+        // ✅ FIX: Múltiplos seletores para cobrir layouts 2024+
         Elements jobs = doc.select(
                 "a[href*='/applications/'], " +      // Padrão 2024
                         "a[href*='/jobs/'], " +               // Alternativo
                         "div[class*='JobsList'] a, " +        // Grid container
                         "div[class*='ashby-job'] a, " +       // Legacy
-                        "a[class*='JobPosting'] a, " +        // CSS Modules
-                        ".job-link, [data-job-id]"            // Fallback genérico
+                        "a[class*='JobPosting']"              // CSS Modules
         );
 
         for (Element e : jobs) {
@@ -62,23 +60,27 @@ public class AshbyFetcher extends HybridJsonHtmlFetcher {
                 href = "https://jobs.ashbyhq.com" + e.attr("href");
             }
 
-            // Validar URL contém ashbyhq
+            // ✅ Validação: Apenas URLs válidas
             if (!href.contains("ashbyhq.com") || href.isBlank()) continue;
 
-            String title = e.select(".ashby-job-posting-title, [class*='Title']").text();
-            if (title.isBlank()) {
-                title = e.text().trim();
-            }
+            String title = e.select(
+                    ".ashby-job-posting-title, " +
+                            "[class*='Title'], " +
+                            "h2, h3"
+            ).text();
 
+            if (title.isBlank()) title = e.text().trim();
             if (title.isBlank() || title.length() > 200) continue;
 
             Job j = new Job("Ashby", company, title, href);
 
-            String location = e.select(".ashby-job-posting-location, [class*='Location']").text();
-            if (!location.isBlank()) {
-                j.setNotes(location);
-            }
+            // ✅ Extract location
+            String location = e.select(
+                    ".ashby-job-posting-location, " +
+                            "[class*='Location']"
+            ).text();
 
+            if (!location.isBlank()) j.setNotes(location);
             out.add(j);
         }
 

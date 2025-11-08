@@ -47,48 +47,46 @@ public class BamboohrFetcher extends HybridJsonHtmlFetcher {
     protected List<Job> parseHtml(String company, Document doc) {
         List<Job> out = new ArrayList<>();
 
-        // ✅ STRATEGY 1: Detect redirect to other ATS
+        // ✅ FIX: Detectar redirecionamentos
         String redirectedATS = detectRedirect(doc);
         if (redirectedATS != null) {
-            log.info("🔀 {} redirects to {} (skipping - will be fetched by {})",
-                    company, redirectedATS, redirectedATS);
-            return out; // Empty - será capturado pelo fetcher correto
+            log.info("🔀 {} redirects to {} (skipping)", company, redirectedATS);
+            return out; // Vazio - será capturado pelo fetcher correto
         }
 
-        // ✅ STRATEGY 2: Parse BambooHR native page
-        out.addAll(parseBambooHRNative(company, doc));
+        // ✅ Parse BambooHR nativo
+        Elements items = doc.select(
+                ".BambooHR-ATS-Job-List a, " +
+                        "a[href*='/careers/'], " +
+                        ".opening a, " +
+                        ".job-listing a"
+        );
 
-        // ✅ STRATEGY 3: Try alternative patterns
-        if (out.isEmpty()) {
-            out.addAll(parseAlternativePatterns(company, doc));
+        for (Element e : items) {
+            String href = e.absUrl("href");
+            if (href.isBlank()) {
+                href = "https://" + company + ".bamboohr.com" + e.attr("href");
+            }
+
+            if (!href.contains("bamboohr.com") || href.isBlank()) continue;
+
+            String title = e.text().trim();
+            if (title.isBlank() || title.length() > 200) continue;
+
+            Job j = new Job("BambooHR", company, title, href);
+            out.add(j);
         }
 
         return out;
     }
 
-    /**
-     * Detect if page redirects to another ATS.
-     */
     private String detectRedirect(Document doc) {
         String html = doc.html();
 
-        if (html.contains("greenhouse.io/embed/job_board") ||
-                html.contains("boards.greenhouse.io")) {
-            return "Greenhouse";
-        }
-
-        if (html.contains("jobs.lever.co") ||
-                html.contains("lever.co/embed")) {
-            return "Lever";
-        }
-
-        if (html.contains("jobs.ashbyhq.com")) {
-            return "Ashby";
-        }
-
-        if (html.contains("apply.workable.com")) {
-            return "Workable";
-        }
+        if (html.contains("greenhouse.io")) return "Greenhouse";
+        if (html.contains("lever.co")) return "Lever";
+        if (html.contains("ashbyhq.com")) return "Ashby";
+        if (html.contains("workable.com")) return "Workable";
 
         return null;
     }

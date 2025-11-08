@@ -22,38 +22,34 @@ import java.util.stream.Collectors;
 public class ATSCompanyLoader {
     private static final Logger log = LoggerFactory.getLogger(ATSCompanyLoader.class);
     private final Http http;
-
+    private final ATSSlugValidator validator;
     @Value("${crawler.ats-csv:C:/Users/SammyJr/dev/ats_discover/ats_results/found_ats.csv}")
     private String csvPath;
 
     private final CrawlerProperties crawlerProps;
 
-    public ATSCompanyLoader(CrawlerProperties crawlerProps, Http http) {
+    public ATSCompanyLoader(CrawlerProperties crawlerProps, Http http, ATSSlugValidator validator) {
         this.crawlerProps = crawlerProps;
         this.http = http;
+        this.validator = validator;
     }
 
     /**
      * Loads CSV on application startup, BEFORE first sync.
      */
     @EventListener(ApplicationReadyEvent.class)
-    public void loadCompaniesFromCSV() {
-        log.info("📋 Loading companies from ATS CSV: {}", csvPath);
+    public void loadCompaniesFromCSV() throws Exception {
+        Map<String, List<String>> atsSlugs = parseCSV(csvPath);
 
-        try {
-            Map<String, List<String>> atsSlugs = parseCSV(csvPath);
+        // ✅ FIX: Validar slugs ANTES de merge
+        atsSlugs.forEach((ats, slugs) -> {
+            if (List.of("Greenhouse", "Lever", "Workable").contains(ats)) {
+                List<String> validSlugs = validator.filterValidSlugs(ats, slugs);
+                atsSlugs.put(ats, validSlugs);
+            }
+        });
 
-            // Merge with existing config (CSV takes precedence)
-            mergeWithConfig(atsSlugs);
-
-            log.info("✅ Loaded {} ATSs from CSV", atsSlugs.size());
-            atsSlugs.forEach((ats, companies) ->
-                    log.info("   {} → {} companies", ats, companies.size())
-            );
-
-        } catch (Exception e) {
-            log.warn("⚠️ Could not load ATS CSV (using config only): {}", e.getMessage());
-        }
+        mergeWithConfig(atsSlugs);
     }
 
     /**

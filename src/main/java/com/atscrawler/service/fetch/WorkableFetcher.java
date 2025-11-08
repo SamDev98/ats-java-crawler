@@ -20,10 +20,8 @@ public class WorkableFetcher extends AbstractJsonFetcher {
     @Override
     protected List<String> getCompanySlugs() { return props.getWorkableCompanies(); }
 
-    // src/main/java/com/atscrawler/service/fetch/WorkableFetcher.java
     @Override
     protected String buildUrl(String companySlug) {
-        // ✅ FIX: Migrar para API v3
         return "https://apply.workable.com/api/v3/accounts/" + companySlug + "/jobs";
     }
 
@@ -31,11 +29,11 @@ public class WorkableFetcher extends AbstractJsonFetcher {
     protected List<Job> parseJobs(String company, JsonNode root) {
         List<Job> out = new ArrayList<>();
 
-        // ✅ API v3 usa "results" (não "jobs")
+        // ✅ FIX: API v3 usa "results" (não "jobs")
         JsonNode results = root.has("results") ? root.get("results") : root.get("jobs");
 
         if (results == null || !results.isArray()) {
-            log.warn("⚠️ Workable - Invalid JSON structure for {}", company);
+            log.warn("⚠️ Workable - Invalid JSON for {}", company);
             return out;
         }
 
@@ -47,7 +45,7 @@ public class WorkableFetcher extends AbstractJsonFetcher {
 
             Job job = new Job("Workable", company, title, url);
 
-            // Location: v3 usa "location.location_str"
+            // ✅ FIX: Location agora usa location.location_str
             String location = j.path("location").path("location_str").asText("");
             if (location.isBlank()) {
                 location = j.path("location").path("city").asText("");
@@ -57,7 +55,6 @@ public class WorkableFetcher extends AbstractJsonFetcher {
             out.add(job);
         }
 
-        log.info("✅ Workable ({}) returned {} jobs", company, out.size());
         return out;
     }
     @Override
