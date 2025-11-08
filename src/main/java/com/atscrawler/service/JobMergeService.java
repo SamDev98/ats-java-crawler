@@ -2,6 +2,7 @@ package com.atscrawler.service;
 
 import com.atscrawler.model.Job;
 import com.atscrawler.repository.JobRepository;
+import lombok.Getter;
 import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,6 +82,7 @@ public class JobMergeService {
     }
 
     // ✅ Inner class agora é package-private ou public
+    @Getter
     public static class SyncStats {
         private final int newJobs;
         private final int updated;
@@ -94,9 +96,17 @@ public class JobMergeService {
             this.reactivated = reactivated;
         }
 
-        public int getNewJobs() { return newJobs; }
-        public int getUpdated() { return updated; }
-        public int getReactivated() { return reactivated; }
-        public int getExpired() { return expired; }
+        @Override
+        public String toString() {
+            return String.format(
+                    """
+                            📊 **Sync Summary**
+                            • New: %d
+                            • Updated: %d
+                            • Reactivated: %d
+                            • Expired: %d""",
+                    newJobs, updated, reactivated, expired
+            );
+        }
     }
 }

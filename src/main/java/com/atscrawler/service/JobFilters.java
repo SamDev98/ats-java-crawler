@@ -21,7 +21,7 @@ public class JobFilters {
 
         // ✅ FIX: Word boundary - rejeita "javascript"
         boolean hasJava = props.getRoleKeywords().stream()
-                .anyMatch(kw -> text.matches(".*\\b" + kw + "\\b.*"));
+                .anyMatch(kw -> text.matches(".*\\b" + kw.toLowerCase() + "\\b.*"));
 
         if (!hasJava) return false;
 

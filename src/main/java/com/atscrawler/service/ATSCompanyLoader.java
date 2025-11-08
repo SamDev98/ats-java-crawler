@@ -10,23 +10,26 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Loads companies from ATS discovery CSV and populates crawler config.
- * Runs BEFORE first sync to ensure all companies are configured.
+ * ✅ WINDOWS-COMPATIBLE: Loads companies from CSV using relative paths
  */
 @Service
 public class ATSCompanyLoader {
     private static final Logger log = LoggerFactory.getLogger(ATSCompanyLoader.class);
     private final Http http;
     private final ATSSlugValidator validator;
-    @Value("${crawler.ats-csv:C:/Users/SammyJr/dev/ats_discover/ats_results/found_ats.csv}")
-    private String csvPath;
-
     private final CrawlerProperties crawlerProps;
+
+    // ✅ FIX: Ordem de prioridade para localizar CSV
+    @Value("${crawler.ats-csv:}")
+    private String csvPathFromConfig;
 
     public ATSCompanyLoader(CrawlerProperties crawlerProps, Http http, ATSSlugValidator validator) {
         this.crawlerProps = crawlerProps;
@@ -34,14 +37,20 @@ public class ATSCompanyLoader {
         this.validator = validator;
     }
 
-    /**
-     * Loads CSV on application startup, BEFORE first sync.
-     */
     @EventListener(ApplicationReadyEvent.class)
     public void loadCompaniesFromCSV() throws Exception {
+        String csvPath = findCSVPath();
+
+        if (csvPath == null) {
+            log.warn("⚠️  No CSV file found, skipping ATS company import");
+            return;
+        }
+
+        log.info("📄 Loading ATS companies from: {}", csvPath);
+
         Map<String, List<String>> atsSlugs = parseCSV(csvPath);
 
-        // ✅ FIX: Validar slugs ANTES de merge
+        // Validate slugs before merge
         atsSlugs.forEach((ats, slugs) -> {
             if (List.of("Greenhouse", "Lever", "Workable").contains(ats)) {
                 List<String> validSlugs = validator.filterValidSlugs(ats, slugs);
@@ -50,6 +59,64 @@ public class ATSCompanyLoader {
         });
 
         mergeWithConfig(atsSlugs);
+
+        log.info("✅ Successfully imported companies from {} ATS sources", atsSlugs.size());
+    }
+
+    /**
+     * ✅ FIX: Busca CSV em múltiplos locais (Windows-compatible)
+     */
+    private String findCSVPath() {
+        // Prioridade 1: Variável de ambiente (set pelo script)
+        String envPath = System.getenv("CRAWLER_ATS_CSV");
+        if (envPath != null && new File(envPath).exists()) {
+            return envPath;
+        }
+
+        // Prioridade 2: Configuração explícita
+        if (csvPathFromConfig != null && !csvPathFromConfig.isBlank()) {
+            File configFile = new File(csvPathFromConfig);
+            if (configFile.exists()) {
+                return configFile.getAbsolutePath();
+            }
+        }
+
+        // Prioridade 3: Relativo ao JAR (mesmo diretório)
+        try {
+            String jarDir = new File(
+                    ATSCompanyLoader.class.getProtectionDomain()
+                            .getCodeSource()
+                            .getLocation()
+                            .toURI()
+            ).getParent();
+
+            String[] relativePaths = {
+                    "found_ats.csv",                                    // Mesmo dir do JAR
+                    "../ats-discovery/ats_results/found_ats.csv",      // Estrutura dev/
+                    "../../ats-discovery/ats_results/found_ats.csv",   // Dentro de target/
+                    "ats_results/found_ats.csv"                         // Fallback
+            };
+
+            for (String relPath : relativePaths) {
+                Path candidate = Paths.get(jarDir, relPath).normalize();
+                File file = candidate.toFile();
+
+                if (file.exists()) {
+                    log.info("📍 Found CSV at: {}", candidate.toAbsolutePath());
+                    return file.getAbsolutePath();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("⚠️  Error resolving JAR directory: {}", e.getMessage());
+        }
+
+        // Prioridade 4: Working directory
+        File workingDirCsv = new File("found_ats.csv");
+        if (workingDirCsv.exists()) {
+            return workingDirCsv.getAbsolutePath();
+        }
+
+        return null;
     }
 
     /**
@@ -79,19 +146,16 @@ public class ATSCompanyLoader {
         return result;
     }
 
-    /**
-     * Extract ATS slug from company name or URL.
-     */
     private String extractSlug(String company, String url) {
         // Try URL patterns first
         if (url.contains("greenhouse.io/")) {
             return url.replaceAll(".*/boards/([^/]+).*", "$1");
         }
         if (url.contains("lever.co/")) {
-            return url.replaceAll(".*/jobs/lever.co/([^/]+).*", "$1");
+            return url.replaceAll(".*lever.co/([^/]+).*", "$1");
         }
         if (url.contains("ashbyhq.com/")) {
-            return url.replaceAll(".*/ashbyhq.com/([^/]+).*", "$1");
+            return url.replaceAll(".*ashbyhq.com/([^/]+).*", "$1");
         }
 
         // Fallback: normalize company name
@@ -100,10 +164,6 @@ public class ATSCompanyLoader {
                 .replaceAll("\\s+", "");
     }
 
-    /**
-     * Merge CSV data with application.properties config.
-     * CSV entries are ADDED to existing config.
-     */
     private void mergeWithConfig(Map<String, List<String>> csvData) {
         // Greenhouse
         if (csvData.containsKey("Greenhouse")) {
@@ -160,13 +220,8 @@ public class ATSCompanyLoader {
             List<String> merged = merge(existing, csvData.get("Jobvite"));
             crawlerProps.setJobviteCompanies(merged);
         }
-
-        // BambooHR (skip - não vale a pena, 44 companies mas 0 jobs)
     }
 
-    /**
-     * Merge two lists, removing duplicates (case-insensitive).
-     */
     private List<String> merge(List<String> existing, List<String> newOnes) {
         Set<String> normalized = existing.stream()
                 .map(String::toLowerCase)
@@ -182,21 +237,5 @@ public class ATSCompanyLoader {
         }
 
         return result;
-    }
-
-    private String detectRealATS(String company, String url) {
-        // Para BambooHR, tentar detectar o ATS real
-        if (url.contains("bamboohr.com")) {
-            String html = http.get(url);
-
-            if (html != null) {
-                if (html.contains("greenhouse.io")) return "Greenhouse";
-                if (html.contains("lever.co")) return "Lever";
-                if (html.contains("ashbyhq.com")) return "Ashby";
-                if (html.contains("workable.com")) return "Workable";
-            }
-        }
-
-        return "BambooHR"; // Fallback
     }
 }
