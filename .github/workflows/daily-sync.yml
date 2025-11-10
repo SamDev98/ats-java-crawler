@@ -1,0 +1,99 @@
+name: Daily ATS Sync
+
+on:
+  schedule:
+    # Executa diariamente às 07:00 UTC
+    - cron: '0 7 * * *'
+
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '21'
+  POSTGRES_VERSION: '16'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ats
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: 🔧 Create credentials.json
+        run: |
+          echo '${{ secrets.GOOGLE_CREDENTIALS }}' > src/main/resources/credentials.json
+
+      - name: 📦 Build JAR
+        run: mvn clean package -DskipTests
+
+      - name: 🚀 Run Daily Sync
+        env:
+          #DATABASE
+          DB_URL: jdbc:postgresql://localhost:5432/ats
+          DB_USER: postgres
+          DB_PASS: postgres
+          #GOOGLE
+          SHEETS_ENABLED: true
+          GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
+          #DISCORD
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          #ATS VARIABLES
+          ATS_GREENHOUSE: ${{ vars.ATS_GREENHOUSE }}
+          ATS_LEVER: ${{ vars.ATS_LEVER }}
+          ATS_RECRUITEE: ${{ vars.ATS_RECRUITEE }}
+          ATS_BREEZY: ${{ vars.ATS_BREEZY }}
+          ROLE_KEYWORDS: java,spring,kotlin,jvm
+          EXCLUDE_KEYWORDS: javascript,frontend,us only,onsite
+        run: |
+          java -jar target/ats-java-crawler-*.jar &
+          PID=$!
+          
+          # Aguarda 5min para sync completar
+          sleep 300
+          
+          # Valida que processo ainda está rodando
+          if kill -0 $PID 2>/dev/null; then
+            echo "✅ Sync em andamento"
+            wait $PID
+          else
+            echo "❌ Processo morreu prematuramente"
+            exit 1
+          fi
+
+      - name: 📊 Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-logs-${{ github.run_number }}
+          path: logs/
+          retention-days: 7
+
+      - name: 📢 Notify on failure
+        if: failure()
+        run: |
+          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{"content":"❌ Daily sync failed! Check logs at https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
