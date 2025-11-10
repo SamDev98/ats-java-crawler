@@ -1,7 +1,6 @@
 package com.atscrawler.service;
 
 import com.atscrawler.config.CrawlerProperties;
-import com.atscrawler.util.Http;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,7 +22,6 @@ import java.util.stream.Collectors;
 @Service
 public class ATSCompanyLoader {
     private static final Logger log = LoggerFactory.getLogger(ATSCompanyLoader.class);
-    private final Http http;
     private final ATSSlugValidator validator;
     private final CrawlerProperties crawlerProps;
 
@@ -31,9 +29,8 @@ public class ATSCompanyLoader {
     @Value("${crawler.ats-csv:}")
     private String csvPathFromConfig;
 
-    public ATSCompanyLoader(CrawlerProperties crawlerProps, Http http, ATSSlugValidator validator) {
+    public ATSCompanyLoader(CrawlerProperties crawlerProps, ATSSlugValidator validator) {
         this.crawlerProps = crawlerProps;
-        this.http = http;
         this.validator = validator;
     }
 
@@ -179,20 +176,6 @@ public class ATSCompanyLoader {
             crawlerProps.setLeverCompanies(merged);
         }
 
-        // Workable
-        if (csvData.containsKey("Workable")) {
-            List<String> existing = crawlerProps.getWorkableCompanies();
-            List<String> merged = merge(existing, csvData.get("Workable"));
-            crawlerProps.setWorkableCompanies(merged);
-        }
-
-        // Ashby
-        if (csvData.containsKey("Ashby")) {
-            List<String> existing = crawlerProps.getAshbyCompanies();
-            List<String> merged = merge(existing, csvData.get("Ashby"));
-            crawlerProps.setAshbyCompanies(merged);
-        }
-
         // BreezyHR
         if (csvData.containsKey("BreezyHR")) {
             List<String> existing = crawlerProps.getBreezyCompanies();
@@ -205,20 +188,6 @@ public class ATSCompanyLoader {
             List<String> existing = crawlerProps.getRecruiteeCompanies();
             List<String> merged = merge(existing, csvData.get("Recruitee"));
             crawlerProps.setRecruiteeCompanies(merged);
-        }
-
-        // Teamtailor
-        if (csvData.containsKey("Teamtailor")) {
-            List<String> existing = crawlerProps.getTeamtailorCompanies();
-            List<String> merged = merge(existing, csvData.get("Teamtailor"));
-            crawlerProps.setTeamtailorCompanies(merged);
-        }
-
-        // Jobvite
-        if (csvData.containsKey("Jobvite")) {
-            List<String> existing = crawlerProps.getJobviteCompanies();
-            List<String> merged = merge(existing, csvData.get("Jobvite"));
-            crawlerProps.setJobviteCompanies(merged);
         }
     }
 

@@ -35,7 +35,9 @@ public class FetcherRegistry {
         log.info("🚀 Initialized FetcherRegistry with {} fetchers", fetchers.size());
         log.info("⚙️ Thread pool size: {}, Timeout: {} minutes", threadPoolSize, timeoutMinutes);
     }
-
+    public int getFetcherCount() {
+        return fetchers.size();
+    }
     /**
      * Run all fetchers in parallel and collect jobs.
      * Uses virtual threads (Java 21+) for efficiency.
@@ -44,45 +46,48 @@ public class FetcherRegistry {
         log.info("🌐 Starting parallel fetch from {} sources...", fetchers.size());
 
         List<Job> allJobs = new CopyOnWriteArrayList<>();
-        ExecutorService executor = threadPoolSize > 0
+
+        // ✅ FIX: try-with-resources para ExecutorService
+        try (ExecutorService executor = threadPoolSize > 0
                 ? Executors.newFixedThreadPool(threadPoolSize)
-                : Executors.newVirtualThreadPerTaskExecutor();
-        List<Future<FetchResult>> futures = new ArrayList<>();
+                : Executors.newVirtualThreadPerTaskExecutor()) {
 
-        // Submit all fetchers
-        for (JobFetcher fetcher : fetchers) {
-            futures.add(executor.submit(() -> fetchSafely(fetcher)));
-        }
+            List<Future<FetchResult>> futures = new ArrayList<>();
 
-        // Collect results with timeout
-        int completed = 0;
-        int failed = 0;
-
-        for (Future<FetchResult> future : futures) {
-            try {
-                FetchResult result = future.get(timeoutMinutes, TimeUnit.MINUTES);
-                if (result.success()) {
-                    allJobs.addAll(result.jobs());
-                    completed++;
-                    log.info("✅ {} returned {} jobs", result.sourceName(), result.jobs().size());
-                } else {
-                    failed++;
-                    log.warn("⚠️ {} failed: {}", result.sourceName(), result.error());
-                }
-            } catch (TimeoutException e) {
-                failed++;
-                log.error("⏱️ Fetcher timed out after {} minutes", timeoutMinutes);
-                future.cancel(true);
-            } catch (Exception e) {
-                failed++;
-                log.error("❌ Error collecting result: {}", e.getMessage());
+            // Submit all fetchers
+            for (JobFetcher fetcher : fetchers) {
+                futures.add(executor.submit(() -> fetchSafely(fetcher)));
             }
-        }
 
-        executor.shutdown();
+            // Collect results with timeout
+            int completed = 0;
+            int failed = 0;
 
-        log.info("📦 Fetch completed: {} successful, {} failed, {} total jobs",
-                completed, failed, allJobs.size());
+            for (Future<FetchResult> future : futures) {
+                try {
+                    FetchResult result = future.get(timeoutMinutes, TimeUnit.MINUTES);
+                    if (result.success()) {
+                        allJobs.addAll(result.jobs());
+                        completed++;
+                        log.info("✅ {} returned {} jobs", result.sourceName(), result.jobs().size());
+                    } else {
+                        failed++;
+                        log.warn("⚠️ {} failed: {}", result.sourceName(), result.error());
+                    }
+                } catch (TimeoutException e) {
+                    failed++;
+                    log.error("⏱️ Fetcher timed out after {} minutes", timeoutMinutes);
+                    future.cancel(true);
+                } catch (Exception e) {
+                    failed++;
+                    log.error("❌ Error collecting result: {}", e.getMessage());
+                }
+            }
+
+            log.info("📦 Fetch completed: {} successful, {} failed, {} total jobs",
+                    completed, failed, allJobs.size());
+
+        } // ✅ ExecutorService.close() chamado automaticamente aqui
 
         return allJobs;
     }

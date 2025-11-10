@@ -10,9 +10,5 @@ import java.util.List;
 @Getter
 @ConfigurationProperties(prefix = "crawler")
 public class CrawlerProperties {
-  private List<String> greenhouseCompanies, leverCompanies, workableCompanies, recruiteeCompanies, ashbyCompanies;
-  private List<String> breezyCompanies, zohoCompanies, jobviteCompanies, taleoCompanies, ripplingCompanies;
-  private List<String> bamboohrCompanies, recruitcrmCompanies, teamtailorCompanies, jobsoidCompanies, talentlyftCompanies;
-  private List<String> hundredHiresCompanies, recruitezeCompanies, kulaCompanies, ismartCompanies, vincereCompanies;
-
+  private List<String> greenhouseCompanies, leverCompanies, recruiteeCompanies, breezyCompanies ;
 }

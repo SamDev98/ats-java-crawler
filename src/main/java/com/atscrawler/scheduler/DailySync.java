@@ -137,13 +137,8 @@ public class DailySync {
         log.info("🔧 Active ATS:");
         log.info("  → Greenhouse: {}", crawlerProps.getGreenhouseCompanies());
         log.info("  → Lever: {}", crawlerProps.getLeverCompanies());
-        log.info("  → Workable: {}", crawlerProps.getWorkableCompanies());
         log.info("  → Recruitee: {}", crawlerProps.getRecruiteeCompanies());
-        log.info("  → Ashby: {}", crawlerProps.getAshbyCompanies());
         log.info("  → BreezyHR: {}", crawlerProps.getBreezyCompanies());
-        log.info("  → Teamtailor: {}", crawlerProps.getTeamtailorCompanies());
-        log.info("  → Jobvite: {}", crawlerProps.getJobviteCompanies());
-        log.info("  → BambooHR: {}", crawlerProps.getBamboohrCompanies());
     }
 
     private void logMergeResults(JobMergeService.SyncStats stats) {

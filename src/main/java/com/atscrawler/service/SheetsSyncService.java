@@ -224,7 +224,7 @@ public class SheetsSyncService {
      */
     private Set<String> getExistingUrlsFromSheet(Sheets sheets) throws Exception {
         ValueRange vr = sheets.spreadsheets().values()
-                .get(spreadsheetId, TAB + "!D2:D1000000") // Column D = URL
+                .get(spreadsheetId, TAB + "!D2:D1000000")
                 .execute();
 
         if (vr.getValues() == null) {

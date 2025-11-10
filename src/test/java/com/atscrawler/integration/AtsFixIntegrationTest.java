@@ -4,23 +4,21 @@ import com.atscrawler.config.CrawlerProperties;
 import com.atscrawler.config.FilterProperties;
 import com.atscrawler.model.Job;
 import com.atscrawler.service.JobFilters;
-import com.atscrawler.service.fetch.*;
+import com.atscrawler.service.fetch.GreenhouseFetcher;
+import com.atscrawler.service.fetch.LeverFetcher;
 import com.atscrawler.util.Http;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
 import org.junit.jupiter.api.*;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.contains;
+import static org.mockito.Mockito.when;
 
 /**
  * ✅ COMPREHENSIVE ATS FIX INTEGRATION TEST
@@ -47,8 +45,6 @@ public class AtsFixIntegrationTest {
 
     private CrawlerProperties crawlerProps;
     private FilterProperties filterProps;
-    private JobFilters jobFilters;
-    private ObjectMapper mapper;
 
     @BeforeEach
     public void setup() {
@@ -56,7 +52,6 @@ public class AtsFixIntegrationTest {
 
         crawlerProps = new CrawlerProperties();
         filterProps = new FilterProperties();
-        mapper = new ObjectMapper();
 
         // ✅ Setup default filter configuration
         filterProps.setRoleKeywords(List.of("java", "spring", "kotlin", "jvm"));
@@ -65,7 +60,6 @@ public class AtsFixIntegrationTest {
                 "us only", "onsite", "hybrid", "javascript", "frontend"
         ));
 
-        jobFilters = new JobFilters(filterProps);
     }
 
 
@@ -101,7 +95,7 @@ public class AtsFixIntegrationTest {
     @Test
     @Order(7)
     @DisplayName("✅ Lever - Valid slug (neon) returns jobs")
-    public void testLever_ValidSlug_ReturnsJobs() throws Exception {
+    public void testLever_ValidSlug_ReturnsJobs() {
         // ARRANGE - Mock valid Lever response
         String validLeverJson = """
             [
@@ -125,8 +119,8 @@ public class AtsFixIntegrationTest {
 
         // ASSERT
         assertEquals(1, jobs.size(), "✅ Valid slug returns 1 job");
-        assertTrue(jobs.get(0).getTitle().contains("Java"));
-        assertEquals("Remote - Americas", jobs.get(0).getNotes());
+        assertTrue(jobs.getFirst().getTitle().contains("Java"));
+        assertEquals("Remote - Americas", jobs.getFirst().getNotes());
     }
 
     @Test
@@ -171,7 +165,7 @@ public class AtsFixIntegrationTest {
     @Test
     @Order(13)
     @DisplayName("✅ Greenhouse - Valid slugs work correctly")
-    public void testGreenhouse_ValidSlugs_ReturnJobs() throws Exception {
+    public void testGreenhouse_ValidSlugs_ReturnJobs() {
         // ARRANGE
         String validJson = """
             {
@@ -195,7 +189,7 @@ public class AtsFixIntegrationTest {
 
         // ASSERT
         assertEquals(1, jobs.size());
-        assertEquals("Backend Engineer - Java", jobs.get(0).getTitle());
+        assertEquals("Backend Engineer - Java", jobs.getFirst().getTitle());
     }
 
     @Test
@@ -246,8 +240,7 @@ public class AtsFixIntegrationTest {
                 String text = (job.getTitle() + " " + job.getNotes()).toLowerCase();
 
                 // ❌ OLD: Simple contains() - matches "java" in "javascript"
-                boolean hasJava = text.contains("java");
-                return hasJava;
+                return text.contains("java");
             }
         };
 
@@ -362,15 +355,15 @@ public class AtsFixIntegrationTest {
     @Test
     @Order(18)
     @DisplayName("🚀 Integration - Full pipeline with multiple ATS")
-    public void testIntegration_FullPipeline_ReturnsQualityJobs() throws Exception {
+    public void testIntegration_FullPipeline_ReturnsQualityJobs() {
         // ARRANGE - Mock responses
         String ghJson = """
         {"jobs": [
-            {"title": "Senior Java Engineer", 
+            {"title": "Senior Java Engineer",\s
              "absolute_url": "https://gh.io/job1",
              "location": {"name": "Remote"}}
         ]}
-        """;
+       \s""";
         when(mockHttp.get(contains("greenhouse"))).thenReturn(ghJson);
 
         String leverJson = """
@@ -391,7 +384,6 @@ public class AtsFixIntegrationTest {
 
         crawlerProps.setGreenhouseCompanies(List.of("test"));
         crawlerProps.setLeverCompanies(List.of("test"));
-        crawlerProps.setAshbyCompanies(List.of("test"));
 
         GreenhouseFetcher gh = new GreenhouseFetcher(crawlerProps, mockHttp);
         LeverFetcher lv = new LeverFetcher(crawlerProps, mockHttp);
@@ -428,7 +420,6 @@ public class AtsFixIntegrationTest {
 
         assertTrue(javaJobs.stream().anyMatch(j -> j.getSource().equals("Greenhouse")));
         assertTrue(javaJobs.stream().anyMatch(j -> j.getSource().equals("Lever")));
-        assertTrue(javaJobs.stream().anyMatch(j -> j.getSource().equals("Ashby")));
     }
 
     @Test
