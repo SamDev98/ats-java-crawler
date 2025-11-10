@@ -13,20 +13,39 @@ import org.springframework.web.client.RestTemplate;
 import java.util.Map;
 
 /**
- * Discord notification service.
- * Sends formatted messages about sync results.
+ * Service responsible for sending formatted job sync notifications to Discord.
+ *
+ * <p>This class integrates with Discord Webhooks to post daily summaries
+ * and custom messages with job statistics.
+ *
+ * <p>Features:
+ * <ul>
+ *   <li>Optional webhook configuration via application properties</li>
+ *   <li>Graceful fallback when webhook is not set</li>
+ *   <li>Formatted markdown messages with emoji support</li>
+ * </ul>
+ *
+ * <p>Environment variable:
+ * <pre>{@code discord.webhook=https://discord.com/api/webhooks/...}</pre>
+ *
+ * @author SamDev98
+ * @since 0.4.1
  */
 @Component
 public class DiscordNotifier {
     private static final Logger log = LoggerFactory.getLogger(DiscordNotifier.class);
 
+    /** Discord webhook URL (injected from application properties). */
     @Value("${discord.webhook:}")
     private String webhook;
 
+    /** REST client used to send HTTP POST requests to Discord. */
     private final RestTemplate rest = new RestTemplate();
 
     /**
-     * Send daily summary notification.
+     * Sends a formatted daily summary message to the configured Discord channel.
+     *
+     * @param stats synchronization statistics (new, updated, reactivated, expired)
      */
     public void sendDailySummary(SyncStats stats) {
         if (webhook == null || webhook.isBlank()) {
@@ -39,7 +58,9 @@ public class DiscordNotifier {
     }
 
     /**
-     * Send custom message.
+     * Sends a plain text or markdown message to Discord.
+     *
+     * @param message message content
      */
     public void send(String message) {
         if (webhook == null || webhook.isBlank()) {
@@ -62,7 +83,10 @@ public class DiscordNotifier {
     }
 
     /**
-     * Format sync stats into readable message.
+     * Formats synchronization statistics into a Discord-readable message.
+     *
+     * @param stats synchronization summary data
+     * @return formatted Discord message (Markdown + emojis)
      */
     private String formatSummary(SyncStats stats) {
         return String.format("""

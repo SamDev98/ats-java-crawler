@@ -16,8 +16,20 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * REST controller for manual operations.
- * Separated from DailySync for Single Responsibility Principle.
+ * REST controller exposing endpoints for manual job synchronization and system health checks.
+ *
+ * <p>Used primarily for on-demand sync runs and quick API-level diagnostics.
+ * Separated from {@link DailySync} to maintain the Single Responsibility Principle.
+ * <p>
+ * Endpoints:
+ * <ul>
+ *   <li>{@code GET /api/run-now} — triggers an immediate synchronization</li>
+ *   <li>{@code GET /api/health} — provides system and job count info</li>
+ *   <li>{@code GET /api/stats} — returns job count per source</li>
+ * </ul>
+ *
+ * @author SamDev98
+ * @since 0.4.1
  */
 @RestController
 @RequestMapping("/api")
@@ -25,11 +37,22 @@ public class ManualSyncController {
     private final DailySync scheduler;
     private final JobRepository repo;
 
+    /**
+     * Constructs a new manual sync controller.
+     *
+     * @param scheduler daily synchronization service
+     * @param repo      job repository for database access
+     */
     public ManualSyncController(DailySync scheduler, JobRepository repo) {
         this.scheduler = scheduler;
         this.repo = repo;
     }
 
+    /**
+     * Runs the synchronization process manually via API.
+     *
+     * @return result summary containing sync stats and job counts
+     */
     @GetMapping("/run-now")
     public ResponseEntity<Map<String, Object>> runNow() {
         DailySync.SyncResult result = scheduler.runSync();
@@ -52,6 +75,11 @@ public class ManualSyncController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Returns basic application health status and counts.
+     *
+     * @return health status JSON
+     */
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> health() {
         Map<String, Object> health = new HashMap<>();
@@ -62,6 +90,11 @@ public class ManualSyncController {
         return ResponseEntity.ok(health);
     }
 
+    /**
+     * Returns job count grouped by source system.
+     *
+     * @return map of source name to job count
+     */
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Long>> stats() {
         List<Job> all = repo.findAll();

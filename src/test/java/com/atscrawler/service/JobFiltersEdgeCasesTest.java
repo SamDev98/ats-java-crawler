@@ -10,11 +10,25 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Unit tests for {@link JobFilterService} covering corner cases and keyword precision.
+ *
+ * <p>Verifies:
+ * <ul>
+ *   <li>Handling of null/empty fields</li>
+ *   <li>Case-insensitive keyword matching</li>
+ *   <li>Word boundary correctness (rejects "JavaScript")</li>
+ *   <li>Remote detection and inclusion/exclusion logic</li>
+ *   <li>Special and Unicode character handling</li>
+ * </ul>
+ *
+ * @since 0.4.1
+ */
 @DisplayName("Edge Cases - Job Filters")
 class JobFiltersEdgeCasesTest {
 
     private FilterProperties props;
-    private JobFilters filters;
+    private JobFilterService filters;
 
     @BeforeEach
     void setup() {
@@ -22,19 +36,21 @@ class JobFiltersEdgeCasesTest {
         props.setRoleKeywords(List.of("java", "spring", "kotlin"));
         props.setIncludeKeywords(List.of());
         props.setExcludeKeywords(List.of("javascript", "frontend"));
-        filters = new JobFilters(props);
+        filters = new JobFilterService(props);
     }
 
     // ========================================
     // EMPTY/NULL HANDLING
     // ========================================
+
     @Test
     @DisplayName("❌ Null title rejected")
     void testFilter_NullTitle_Rejected() {
         Job job = new Job("Test", "Co", "Java Dev", "https://x.com");
 
-        // ✅ FIX: Exceção ocorre no setter, não no filter
-        assertThrows(IllegalArgumentException.class, () -> job.setTitle(null), "Setter deve rejeitar título nulo");
+        // Exception occurs in setter, not during filter evaluation
+        assertThrows(IllegalArgumentException.class, () -> job.setTitle(null),
+                "Setter should reject null titles");
     }
 
     @Test
@@ -42,16 +58,14 @@ class JobFiltersEdgeCasesTest {
     void testFilter_NullNotes_HandledGracefully() {
         Job job = new Job("Test", "Co", "Java Developer", "https://x.com");
         job.setNotes(null);
-
-        // Deve rejeitar (sem remote keyword)
         assertFalse(filters.matches(job));
     }
 
     @Test
-    @DisplayName("❌ Empty keywords list rejects all")
+    @DisplayName("❌ Empty role keyword list rejects all")
     void testFilter_EmptyRoleKeywords_RejectsAll() {
         props.setRoleKeywords(List.of());
-        JobFilters emptyFilter = new JobFilters(props);
+        JobFilterService emptyFilter = new JobFilterService(props);
 
         Job job = new Job("Test", "Co", "Java Developer", "https://x.com");
         job.setNotes("Remote");
@@ -85,7 +99,6 @@ class JobFiltersEdgeCasesTest {
     void testFilter_JavaScript_Rejected() {
         Job job = new Job("Test", "Co", "JavaScript Full Stack", "https://x.com");
         job.setNotes("Remote");
-
         assertFalse(filters.matches(job));
     }
 
@@ -94,7 +107,6 @@ class JobFiltersEdgeCasesTest {
     void testFilter_JavaSE_Accepted() {
         Job job = new Job("Test", "Co", "Java SE Developer", "https://x.com");
         job.setNotes("Remote");
-
         assertTrue(filters.matches(job));
     }
 
@@ -103,7 +115,6 @@ class JobFiltersEdgeCasesTest {
     void testFilter_SpringBoot_Accepted() {
         Job job = new Job("Test", "Co", "Spring Boot Engineer", "https://x.com");
         job.setNotes("Remote - LATAM");
-
         assertTrue(filters.matches(job));
     }
 
@@ -112,7 +123,6 @@ class JobFiltersEdgeCasesTest {
     void testFilter_KotlinJVM_Accepted() {
         Job job = new Job("Test", "Co", "Kotlin Developer", "https://x.com");
         job.setNotes("Remote");
-
         assertTrue(filters.matches(job));
     }
 
@@ -125,7 +135,6 @@ class JobFiltersEdgeCasesTest {
     void testFilter_Frontend_Excluded() {
         Job job = new Job("Test", "Co", "Java Developer (Frontend Focus)", "https://x.com");
         job.setNotes("Remote");
-
         assertFalse(filters.matches(job));
     }
 
@@ -133,7 +142,7 @@ class JobFiltersEdgeCasesTest {
     @DisplayName("❌ Job with 'US only' excluded")
     void testFilter_USOnly_Excluded() {
         props.setExcludeKeywords(List.of("us only", "usa only"));
-        JobFilters newFilter = new JobFilters(props);
+        JobFilterService newFilter = new JobFilterService(props);
 
         Job job = new Job("Test", "Co", "Java Engineer", "https://x.com");
         job.setNotes("Remote - US only");
@@ -150,7 +159,6 @@ class JobFiltersEdgeCasesTest {
     void testFilter_Remote_Detected() {
         Job job = new Job("Test", "Co", "Java Dev", "https://x.com");
         job.setNotes("Remote");
-
         assertTrue(filters.matches(job));
     }
 
@@ -158,11 +166,10 @@ class JobFiltersEdgeCasesTest {
     @DisplayName("✅ 'Work from anywhere' detected")
     void testFilter_WorkFromAnywhere_Detected() {
         props.setIncludeKeywords(List.of("remote", "work from anywhere"));
-        JobFilters newFilter = new JobFilters(props);
+        JobFilterService newFilter = new JobFilterService(props);
 
         Job job = new Job("Test", "Co", "Java Dev", "https://x.com");
         job.setNotes("Work from anywhere");
-
         assertTrue(newFilter.matches(job));
     }
 
@@ -170,11 +177,10 @@ class JobFiltersEdgeCasesTest {
     @DisplayName("✅ 'LATAM' detected")
     void testFilter_LATAM_Detected() {
         props.setIncludeKeywords(List.of("latam", "latin america"));
-        JobFilters newFilter = new JobFilters(props);
+        JobFilterService newFilter = new JobFilterService(props);
 
         Job job = new Job("Test", "Co", "Java Dev", "https://x.com");
         job.setNotes("Remote - LATAM");
-
         assertTrue(newFilter.matches(job));
     }
 
@@ -183,7 +189,6 @@ class JobFiltersEdgeCasesTest {
     void testFilter_NoRemote_Rejected() {
         Job job = new Job("Test", "Co", "Java Developer", "https://x.com");
         job.setNotes("San Francisco office");
-
         assertFalse(filters.matches(job));
     }
 
@@ -196,7 +201,6 @@ class JobFiltersEdgeCasesTest {
     void testFilter_SpecialChars_Handled() {
         Job job = new Job("Test", "Co", "Java/Kotlin (Spring)", "https://x.com");
         job.setNotes("Remote");
-
         assertTrue(filters.matches(job));
     }
 
@@ -205,7 +209,6 @@ class JobFiltersEdgeCasesTest {
     void testFilter_Unicode_Handled() {
         Job job = new Job("Test", "Co", "Java Developer 🚀", "https://x.com");
         job.setNotes("Remote 🌎");
-
         assertTrue(filters.matches(job));
     }
 }

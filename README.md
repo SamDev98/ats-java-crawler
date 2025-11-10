@@ -1,44 +1,124 @@
-# ATS Java Crawler v0.3.1 — Java Roles + Remote/LATAM Filters + 20 ATS
+# ATS Java Crawler v0.4.1
 
-Production-grade Spring Boot app to collect **Java-related** remote jobs that are **remote anywhere** (not US-only) and accept **Brazil/LatAm**.
+Spring Boot application that automatically crawls 4+ ATS platforms daily to find **remote Java/Spring/Kotlin jobs** accepting **LATAM/Brazil** candidates.
 
-## What’s included
-- ✅ 20 ATS (5 JSON: Greenhouse/Lever/Workable/Recruitee/Ashby + 15 HTML with Jsoup)
-- ✅ Daily scheduler, merge/expire policy, Discord notifications
-- ✅ Google Sheets UX: frozen header, auto filter, column widths, row highlight (NEW/EXPIRED)
-- ✅ Configurable filters (env): `ROLE_KEYWORDS`, `INCLUDE_KEYWORDS`, `EXCLUDE_KEYWORDS`
+## Features
 
-## Quick start (local)
+- ✅ **4 ATS Integrations**: Greenhouse, Lever, Recruitee, BreezyHR
+- ✅ **Smart Filtering**: Word boundary regex (rejects "JavaScript", accepts "Java")
+- ✅ **Google Sheets Sync**: Append-only bidirectional sync preserves manual edits
+- ✅ **Non-Destructive**: Never deletes jobs, only marks as inactive after 30 days
+- ✅ **GitHub Actions**: Automated daily runs at 07:00 UTC
+- ✅ **Discord Notifications**: Daily summary with stats
+
+## Quick Start
+
+### Prerequisites
+- Java 21
+- PostgreSQL 16
+- Google Cloud Service Account (for Sheets)
+
+### Local Development
 ```bash
-# edit application.properties to set DB_*, filters, and a few ATS slugs
+# 1. Configure environment
+export DB_URL=jdbc:postgresql://localhost:5432/ats
+export DB_USER=postgres
+export DB_PASS=postgres
+export GOOGLE_SHEETS_ID=your_sheet_id
+export ATS_GREENHOUSE=robinhood,stripe,vercel
+
+# 2. Build and run
 mvn clean package -DskipTests
-# set env vars in PowerShell (or create a .ps1 that sets them)
-java -jar target/ats-java-crawler-0.3.1.jar
+java -jar target/ats-java-crawler-0.4.1.jar
 ```
 
-## CSV Import (add many companies fast)
-- Provide a pipe-delimited CSV with header: `Company|URL|ATS|Timestamp`
-- Set `COMPANY_CSV` env var (or `crawler.company-csv` in `application.properties`) to the file path.
-- On startup, the app will parse the CSV, derive ATS slugs from the URL when possible, or fall back to a normalized company name, and merge them into the configured ATS lists.
+### GitHub Actions Setup
+```bash
+# 1. Configure secrets
+gh secret set GOOGLE_CREDENTIALS < src/main/resources/credentials.json
+gh secret set GOOGLE_SHEETS_ID --body "your_sheet_id"
+gh secret set DISCORD_WEBHOOK --body "your_webhook_url"
 
-Example (PowerShell):
-```powershell
-$env:COMPANY_CSV = "C:\\path\\to\\companies.csv"
-mvn -q -DskipTests package
-java -jar target/ats-java-crawler-0.4.0.jar
+# 2. Configure variables
+gh variable set ATS_GREENHOUSE --body "company1,company2"
+gh variable set ATS_LEVER --body "company3,company4"
+
+# 3. Push workflows
+git add .github/workflows/
+git commit -m "ci: add GitHub Actions"
+git push
 ```
 
-Notes:
-- You can still set `ATS_*` env vars to seed or override slugs.
-- The import is additive and de-duplicates case-insensitively.
-- Best results when the `URL` column points to the ATS page (e.g., `boards.greenhouse.io/<slug>`); otherwise heuristics use the company name.
+## Configuration
 
-## Filters
-- Must match **one** ROLE keyword (default: java/spring/spring boot/microservices)
-- Must match **one** INCLUDE keyword (remote/latam/brazil/latin america/work from anywhere)
-- Must match **none** of EXCLUDE (us only/onsite/etc.)
+### Filters (application.properties)
+```properties
+# Role keywords (word boundary regex)
+filter.role-keywords=\\bjava\\b,\\bspring\\b,\\bkotlin\\b
 
-## Sheets
-- Tab `Jobs` with columns: `Company | Title | Source | URL | First Seen | Last Seen | Active | Status | Notes`
-- Freeze header, auto-filter, resize columns, NEW/EXPIRED highlight
-- Edits to Status/Notes are pulled back into DB on next run
+# Exclude keywords
+filter.exclude-keywords=javascript,frontend,us only,onsite
+
+# Include keywords (optional - defaults to remote detection)
+filter.include-keywords=
+```
+
+### ATS Companies
+```properties
+crawler.greenhouse-companies=${ATS_GREENHOUSE:}
+crawler.lever-companies=${ATS_LEVER:}
+crawler.recruitee-companies=${ATS_RECRUITEE:}
+crawler.breezy-companies=${ATS_BREEZY:}
+```
+
+## Google Sheets Setup
+
+1. Create spreadsheet at [sheets.google.com](https://sheets.google.com)
+2. Share with Service Account email (Editor permission)
+3. Copy Sheet ID from URL: `docs.google.com/spreadsheets/d/{SHEET_ID}/edit`
+4. Set `GOOGLE_SHEETS_ID` secret
+
+**Sheet columns:**
+`Company | Title | Source | URL | First Seen | Last Seen | Active | Status | Notes`
+
+## API Endpoints
+```bash
+# Manual sync trigger
+curl http://localhost:8080/api/run-now
+
+# Health check
+curl http://localhost:8080/api/health
+
+# Statistics
+curl http://localhost:8080/api/stats
+```
+
+## Architecture
+```
+DailySync (Orchestrator)
+├── FetcherRegistry (Parallel execution)
+│   ├── GreenhouseFetcher
+│   ├── LeverFetcher
+│   ├── RecruiteeFetcher
+│   └── BreezyFetcher
+├── JobFilters (Word boundary validation)
+├── JobMergeService (Non-destructive merge)
+├── SheetsSyncService (Bidirectional sync)
+└── DiscordNotifier
+```
+
+## Development
+```bash
+# Run tests
+mvn test
+
+# Run with dev profile
+java -jar target/*.jar --spring.profiles.active=dev
+
+# View logs
+tail -f logs/app.log
+```
+
+## License
+
+MIT

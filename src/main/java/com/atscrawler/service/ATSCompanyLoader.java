@@ -17,7 +17,21 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * ✅ WINDOWS-COMPATIBLE: Loads companies from CSV using relative paths
+ * Service responsible for loading ATS company data from CSV files.
+ * Implements Windows-compatible path resolution with multiple fallback strategies.
+ *
+ * <p>CSV Format: Company|URL|ATS|Timestamp
+ *
+ * <p>Search priority:
+ * <ol>
+ *   <li>Environment variable CRAWLER_ATS_CSV</li>
+ *   <li>Application property crawler.ats-csv</li>
+ *   <li>Relative to JAR directory</li>
+ *   <li>Working directory</li>
+ * </ol>
+ *
+ * @author SamDev98
+ * @since 0.4.1
  */
 @Service
 public class ATSCompanyLoader {
@@ -25,15 +39,26 @@ public class ATSCompanyLoader {
     private final ATSSlugValidator validator;
     private final CrawlerProperties crawlerProps;
 
-    // ✅ FIX: Ordem de prioridade para localizar CSV
     @Value("${crawler.ats-csv:}")
     private String csvPathFromConfig;
 
+    /**
+     * Constructs a new ATSCompanyLoader with required dependencies.
+     *
+     * @param crawlerProps the crawler configuration properties
+     * @param validator the slug validator for ATS validation
+     */
     public ATSCompanyLoader(CrawlerProperties crawlerProps, ATSSlugValidator validator) {
         this.crawlerProps = crawlerProps;
         this.validator = validator;
     }
 
+    /**
+     * Loads companies from CSV file on application ready event.
+     * Validates slugs and merges with existing configuration.
+     *
+     * @throws Exception if CSV parsing or file reading fails
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void loadCompaniesFromCSV() throws Exception {
         String csvPath = findCSVPath();
@@ -61,16 +86,26 @@ public class ATSCompanyLoader {
     }
 
     /**
-     * ✅ FIX: Busca CSV em múltiplos locais (Windows-compatible)
+     * Searches for CSV file in multiple locations with Windows compatibility.
+     *
+     * <p>Priority order:
+     * <ol>
+     *   <li>Environment variable CRAWLER_ATS_CSV</li>
+     *   <li>Configuration property crawler.ats-csv</li>
+     *   <li>Relative to JAR location (multiple paths)</li>
+     *   <li>Working directory</li>
+     * </ol>
+     *
+     * @return absolute path to CSV file, or null if not found
      */
     private String findCSVPath() {
-        // Prioridade 1: Variável de ambiente (set pelo script)
+        // Priority 1: Environment variable (set by script)
         String envPath = System.getenv("CRAWLER_ATS_CSV");
         if (envPath != null && new File(envPath).exists()) {
             return envPath;
         }
 
-        // Prioridade 2: Configuração explícita
+        // Priority 2: Explicit configuration
         if (csvPathFromConfig != null && !csvPathFromConfig.isBlank()) {
             File configFile = new File(csvPathFromConfig);
             if (configFile.exists()) {
@@ -78,7 +113,7 @@ public class ATSCompanyLoader {
             }
         }
 
-        // Prioridade 3: Relativo ao JAR (mesmo diretório)
+        // Priority 3: Relative to JAR (same directory)
         try {
             String jarDir = new File(
                     ATSCompanyLoader.class.getProtectionDomain()
@@ -88,9 +123,9 @@ public class ATSCompanyLoader {
             ).getParent();
 
             String[] relativePaths = {
-                    "found_ats.csv",                                    // Mesmo dir do JAR
-                    "../ats-discovery/ats_results/found_ats.csv",      // Estrutura dev/
-                    "../../ats-discovery/ats_results/found_ats.csv",   // Dentro de target/
+                    "found_ats.csv",                                    // Same JAR directory
+                    "../ats-discovery/ats_results/found_ats.csv",      // Dev structure
+                    "../../ats-discovery/ats_results/found_ats.csv",   // Inside target/
                     "ats_results/found_ats.csv"                         // Fallback
             };
 
@@ -107,7 +142,7 @@ public class ATSCompanyLoader {
             log.warn("⚠️  Error resolving JAR directory: {}", e.getMessage());
         }
 
-        // Prioridade 4: Working directory
+        // Priority 4: Working directory
         File workingDirCsv = new File("found_ats.csv");
         if (workingDirCsv.exists()) {
             return workingDirCsv.getAbsolutePath();
@@ -117,7 +152,13 @@ public class ATSCompanyLoader {
     }
 
     /**
-     * Parse CSV format: Company|URL|ATS|Timestamp
+     * Parses CSV file and groups companies by ATS type.
+     *
+     * <p>Expected CSV format: Company|URL|ATS|Timestamp
+     *
+     * @param path absolute path to CSV file
+     * @return map of ATS type to list of slugs
+     * @throws Exception if file reading fails
      */
     private Map<String, List<String>> parseCSV(String path) throws Exception {
         Map<String, List<String>> result = new HashMap<>();
@@ -143,6 +184,20 @@ public class ATSCompanyLoader {
         return result;
     }
 
+    /**
+     * Extracts ATS slug from URL or normalizes company name as fallback.
+     *
+     * <p>Supports URL patterns for:
+     * <ul>
+     *   <li>Greenhouse: boards.greenhouse.io/[slug]</li>
+     *   <li>Lever: jobs.lever.co/[slug]</li>
+     *   <li>Ashby: jobs.ashbyhq.com/[slug]</li>
+     * </ul>
+     *
+     * @param company company name (fallback)
+     * @param url company careers page URL
+     * @return extracted or normalized slug
+     */
     private String extractSlug(String company, String url) {
         // Try URL patterns first
         if (url.contains("greenhouse.io/")) {
@@ -161,6 +216,12 @@ public class ATSCompanyLoader {
                 .replaceAll("\\s+", "");
     }
 
+    /**
+     * Merges CSV data with existing configuration properties.
+     * Performs case-insensitive deduplication.
+     *
+     * @param csvData map of ATS type to slugs from CSV
+     */
     private void mergeWithConfig(Map<String, List<String>> csvData) {
         // Greenhouse
         if (csvData.containsKey("Greenhouse")) {
@@ -191,6 +252,13 @@ public class ATSCompanyLoader {
         }
     }
 
+    /**
+     * Merges two lists with case-insensitive deduplication.
+     *
+     * @param existing current list of slugs
+     * @param newOnes new slugs to add
+     * @return merged list without duplicates
+     */
     private List<String> merge(List<String> existing, List<String> newOnes) {
         Set<String> normalized = existing.stream()
                 .map(String::toLowerCase)

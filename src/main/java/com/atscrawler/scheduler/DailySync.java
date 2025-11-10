@@ -23,7 +23,7 @@ public class DailySync {
 
     private final FetcherRegistry registry;
     private final JobRepository repo;
-    private final JobFilters filters;
+    private final JobFilterService filters;
     private final JobMergeService mergeService;
     private final SheetsSyncService sheets;
     private final DiscordNotifier discord;
@@ -33,7 +33,7 @@ public class DailySync {
     public DailySync(
             FetcherRegistry registry,
             JobRepository repo,
-            JobFilters filters,
+            JobFilterService filters,
             JobMergeService mergeService,
             SheetsSyncService sheets,
             DiscordNotifier discord,

@@ -19,17 +19,42 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
-
 /**
- * Production-grade Google Sheets sync service.
- * Manages sheet structure, formatting, and bidirectional sync.
- * Uses existing sheet (no auto-create) for maximum reliability.
+ * Production-grade Google Sheets synchronization service.
+ * Manages bidirectional sync between database and Google Sheets.
+ *
+ * <p>Features:
+ * <ul>
+ *   <li>Automatic sheet structure management (tabs, headers, formatting)</li>
+ *   <li>Incremental updates (only new jobs added)</li>
+ *   <li>Bidirectional sync (DB → Sheets, Sheets → DB)</li>
+ *   <li>Visual highlighting (new jobs in green, expired in red)</li>
+ *   <li>Filter integration (only Java remote jobs synced)</li>
+ * </ul>
+ *
+ * <p>Sheet Structure:
+ * <ul>
+ *   <li>Tab: "Jobs"</li>
+ *   <li>Columns: Company | Title | Source | URL | First Seen | Last Seen | Active | Status | Notes</li>
+ *   <li>Header: Row 1 (frozen, bold, gray background)</li>
+ *   <li>Data: Rows 2+ (auto-filter enabled)</li>
+ * </ul>
+ *
+ * <p>Configuration:
+ * <pre>
+ * sheets.enabled=true
+ * sheets.spreadsheetId=YOUR_SPREADSHEET_ID
+ * google.credentials=/path/to/credentials.json
+ * </pre>
+ *
+ * @author SamDev98
+ * @since 0.4.1
  */
 @Service
 public class SheetsSyncService {
     private static final Logger log = LoggerFactory.getLogger(SheetsSyncService.class);
     private final JobRepository repo;
-    private final JobFilters filters;  // ✅ ADICIONAR
+    private final JobFilterService filters;  // ✅ ADICIONAR
 
     @Value("${sheets.enabled:false}") private boolean enabled;
     @Value("${sheets.spreadsheetId:}") private String spreadsheetId;
@@ -41,7 +66,7 @@ public class SheetsSyncService {
     );
 
     // ✅ ADICIONAR JobFilters no construtor
-    public SheetsSyncService(JobRepository repo, JobFilters filters) {
+    public SheetsSyncService(JobRepository repo, JobFilterService filters) {
         this.repo = repo;
         this.filters = filters;
     }

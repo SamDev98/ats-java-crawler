@@ -3,7 +3,7 @@ package com.atscrawler.integration;
 import com.atscrawler.config.CrawlerProperties;
 import com.atscrawler.config.FilterProperties;
 import com.atscrawler.model.Job;
-import com.atscrawler.service.JobFilters;
+import com.atscrawler.service.JobFilterService;
 import com.atscrawler.service.fetch.GreenhouseFetcher;
 import com.atscrawler.service.fetch.LeverFetcher;
 import com.atscrawler.util.Http;
@@ -21,19 +21,21 @@ import static org.mockito.Mockito.contains;
 import static org.mockito.Mockito.when;
 
 /**
- * ✅ COMPREHENSIVE ATS FIX INTEGRATION TEST
- * <p>
- * Covers ALL known failure scenarios:
- * 1. ❌ Ashby - HTML selector outdated
- * 2. ❌ Workable - API v1 deprecated (400 Bad Request)
- * 3. ❌ Lever - Invalid slugs (404 Not Found)
- * 4. ❌ Teamtailor - Wrong slug format
- * 5. ❌ Jobvite - JavaScript-rendered pages
- * 6. ✅ Greenhouse - Validation of working ATS
- * 7. ✅ Java Filter - Word boundary precision
+ * Integration test suite for all supported ATS fetchers and job filtering logic.
  *
- * @author ATS Crawler Team
- * @version 1.0 - Critical Fixes
+ * <p>Validates:
+ * <ul>
+ *   <li>Failure scenarios for broken or deprecated ATS endpoints</li>
+ *   <li>Proper handling of invalid company slugs (404, malformed URLs, etc.)</li>
+ *   <li>Correct JSON parsing for Lever and Greenhouse</li>
+ *   <li>Filter precision for Java-related jobs using regex word boundaries</li>
+ *   <li>Performance of slug validation utilities</li>
+ * </ul>
+ *
+ * <p>This suite acts as a high-level regression test for core ATS integrations.
+ *
+ * @author SamDev98
+ * @since 0.4.2
  */
 @SpringBootTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -53,42 +55,30 @@ public class AtsFixIntegrationTest {
         crawlerProps = new CrawlerProperties();
         filterProps = new FilterProperties();
 
-        // ✅ Setup default filter configuration
         filterProps.setRoleKeywords(List.of("java", "spring", "kotlin", "jvm"));
         filterProps.setIncludeKeywords(List.of());
-        filterProps.setExcludeKeywords(List.of(
-                "us only", "onsite", "hybrid", "javascript", "frontend"
-        ));
-
+        filterProps.setExcludeKeywords(List.of("us only", "onsite", "hybrid", "javascript", "frontend"));
     }
 
-
-
-    // ============================================
-    // 🔴 TEST GROUP 3: LEVER SLUG VALIDATION
-    // ============================================
+    // ===========================================================
+    // LEVER FETCHER TESTS
+    // ===========================================================
 
     @Test
     @Order(6)
     @DisplayName("❌ Lever - Invalid slugs return 404")
     public void testLever_InvalidSlugs_Return404() {
-        // ARRANGE
         String[] invalidSlugs = {"zapier", "gitlab", "canva"};
 
         for (String slug : invalidSlugs) {
-            // Mock 404 response
             String errorJson = "{\"ok\":false,\"error\":\"Document not found\"}";
             when(mockHttp.get(contains(slug))).thenReturn(errorJson);
 
             crawlerProps.setLeverCompanies(List.of(slug));
             LeverFetcher fetcher = new LeverFetcher(crawlerProps, mockHttp);
 
-            // ACT
             List<Job> jobs = fetcher.fetch();
-
-            // ASSERT
-            assertEquals(0, jobs.size(),
-                    "❌ Slug '" + slug + "' is invalid (404)");
+            assertEquals(0, jobs.size(), "Slug '" + slug + "' is invalid (404)");
         }
     }
 
@@ -96,15 +86,12 @@ public class AtsFixIntegrationTest {
     @Order(7)
     @DisplayName("✅ Lever - Valid slug (neon) returns jobs")
     public void testLever_ValidSlug_ReturnsJobs() {
-        // ARRANGE - Mock valid Lever response
         String validLeverJson = """
             [
                 {
                     "text": "Senior Backend Engineer (Java)",
                     "hostedUrl": "https://jobs.lever.co/neon/abc123",
-                    "categories": {
-                        "location": "Remote - Americas"
-                    }
+                    "categories": { "location": "Remote - Americas" }
                 }
             ]
             """;
@@ -114,11 +101,9 @@ public class AtsFixIntegrationTest {
         crawlerProps.setLeverCompanies(List.of("neon"));
         LeverFetcher fetcher = new LeverFetcher(crawlerProps, mockHttp);
 
-        // ACT
         List<Job> jobs = fetcher.fetch();
 
-        // ASSERT
-        assertEquals(1, jobs.size(), "✅ Valid slug returns 1 job");
+        assertEquals(1, jobs.size(), "Valid slug returns 1 job");
         assertTrue(jobs.getFirst().getTitle().contains("Java"));
         assertEquals("Remote - Americas", jobs.getFirst().getNotes());
     }
@@ -127,7 +112,6 @@ public class AtsFixIntegrationTest {
     @Order(8)
     @DisplayName("🔍 Lever - Slug validator utility")
     public void testLever_SlugValidator_IdentifiesInvalidSlugs() {
-        // ARRANGE - Create slug validator
         class LeverSlugValidator {
             private final Http http;
 
@@ -138,35 +122,30 @@ public class AtsFixIntegrationTest {
             boolean isValid(String slug) {
                 String url = "https://api.lever.co/v0/postings/" + slug + "?mode=json";
                 String response = http.get(url);
-
                 if (response == null) return false;
-
-                // Check for error indicators
                 return !response.contains("\"ok\":false") &&
                         !response.contains("Document not found") &&
                         response.startsWith("[");
             }
         }
 
-        // Mock responses
         when(mockHttp.get(contains("neon"))).thenReturn("[{\"text\":\"test\"}]");
         when(mockHttp.get(contains("invalid"))).thenReturn("{\"ok\":false}");
 
         LeverSlugValidator validator = new LeverSlugValidator(mockHttp);
 
-        // ACT & ASSERT
-        assertTrue(validator.isValid("neon"), "✅ neon is valid");
-        assertFalse(validator.isValid("invalid"), "❌ invalid slug detected");
+        assertTrue(validator.isValid("neon"));
+        assertFalse(validator.isValid("invalid"));
     }
-    // ============================================
-    // ✅ TEST GROUP 6: GREENHOUSE VALIDATION
-    // ============================================
+
+    // ===========================================================
+    // GREENHOUSE FETCHER TESTS
+    // ===========================================================
 
     @Test
     @Order(13)
     @DisplayName("✅ Greenhouse - Valid slugs work correctly")
     public void testGreenhouse_ValidSlugs_ReturnJobs() {
-        // ARRANGE
         String validJson = """
             {
                 "jobs": [
@@ -184,10 +163,8 @@ public class AtsFixIntegrationTest {
         crawlerProps.setGreenhouseCompanies(List.of("vercel"));
         GreenhouseFetcher fetcher = new GreenhouseFetcher(crawlerProps, mockHttp);
 
-        // ACT
         List<Job> jobs = fetcher.fetch();
 
-        // ASSERT
         assertEquals(1, jobs.size());
         assertEquals("Backend Engineer - Java", jobs.getFirst().getTitle());
     }
@@ -196,7 +173,6 @@ public class AtsFixIntegrationTest {
     @Order(14)
     @DisplayName("❌ Greenhouse - Invalid slugs return 404")
     public void testGreenhouse_InvalidSlugs_Return404() {
-        // ARRANGE
         String[] invalidSlugs = {"ifood", "runway", "c3ai"};
 
         for (String slug : invalidSlugs) {
@@ -206,164 +182,88 @@ public class AtsFixIntegrationTest {
             crawlerProps.setGreenhouseCompanies(List.of(slug));
             GreenhouseFetcher fetcher = new GreenhouseFetcher(crawlerProps, mockHttp);
 
-            // ACT
             List<Job> jobs = fetcher.fetch();
-
-            // ASSERT
-            assertEquals(0, jobs.size(),
-                    "Slug '" + slug + "' should be removed from config");
+            assertEquals(0, jobs.size(), "Slug '" + slug + "' should be removed from config");
         }
     }
 
-    // ============================================
-    // ✅ TEST GROUP 7: JAVA FILTER PRECISION
-    // ============================================
+    // ===========================================================
+    // FILTER PRECISION TESTS
+    // ===========================================================
 
     @Test
     @Order(15)
-    @DisplayName("❌ Java Filter - OLD version accepts JavaScript")
+    @DisplayName("❌ Java Filter - Old version accepts JavaScript")
     public void testJavaFilter_Old_AcceptsJavaScript() {
-        // ARRANGE - Job with "JavaScript" in title
         Job jsJob = new Job("Test", "Company",
-                "Frontend Developer - JavaScript/React",
-                "https://example.com/job1");
+                "Frontend Developer - JavaScript/React", "https://example.com/job1");
         jsJob.setNotes("Remote");
 
-        // ✅ OLD filter (no word boundary)
         FilterProperties oldFilterProps = new FilterProperties();
         oldFilterProps.setRoleKeywords(List.of("java", "spring"));
         oldFilterProps.setExcludeKeywords(List.of("us only"));
 
-        JobFilters oldFilter = new JobFilters(oldFilterProps) {
+        JobFilterService oldFilter = new JobFilterService(oldFilterProps) {
             @Override
             public boolean matches(Job job) {
                 String text = (job.getTitle() + " " + job.getNotes()).toLowerCase();
-
-                // ❌ OLD: Simple contains() - matches "java" in "javascript"
                 return text.contains("java");
             }
         };
 
-        // ACT
         boolean result = oldFilter.matches(jsJob);
-
-        // ASSERT
-        assertTrue(result,
-                "❌ OLD filter incorrectly accepts JavaScript jobs");
+        assertTrue(result, "Old filter incorrectly accepts JavaScript jobs");
     }
 
     @Test
     @Order(16)
-    @DisplayName("✅ Java Filter - FIXED version rejects JavaScript")
+    @DisplayName("✅ Java Filter - Fixed version rejects JavaScript")
     public void testJavaFilter_Fixed_RejectsJavaScript() {
-        // ARRANGE
         Job jsJob = new Job("Test", "Company",
-                "Frontend Developer - JavaScript/React",
-                "https://example.com/job1");
+                "Frontend Developer - JavaScript/React", "https://example.com/job1");
         jsJob.setNotes("Remote");
 
         Job javaJob = new Job("Test", "Company",
-                "Backend Engineer - Java/Spring Boot",
-                "https://example.com/job2");
+                "Backend Engineer - Java/Spring Boot", "https://example.com/job2");
         javaJob.setNotes("Remote - LATAM");
 
-        // ✅ FIXED filter (word boundary)
         FilterProperties fixedFilterProps = new FilterProperties();
         fixedFilterProps.setRoleKeywords(List.of("java", "spring", "kotlin"));
         fixedFilterProps.setExcludeKeywords(List.of("javascript", "frontend"));
 
-        JobFilters fixedFilter = new JobFilters(fixedFilterProps) {
+        JobFilterService fixedFilter = new JobFilterService(fixedFilterProps) {
             @Override
             public boolean matches(Job job) {
                 String text = (job.getTitle() + " " + job.getNotes()).toLowerCase();
-
-                // ✅ FIXED: Word boundary regex
                 boolean hasJava = text.matches(".*\\b(java|spring|kotlin)\\b.*");
                 boolean hasExclude = fixedFilterProps.getExcludeKeywords().stream()
                         .anyMatch(text::contains);
-
                 return hasJava && !hasExclude;
             }
         };
 
-        // ACT
         boolean jsResult = fixedFilter.matches(jsJob);
         boolean javaResult = fixedFilter.matches(javaJob);
 
-        // ASSERT
-        assertFalse(jsResult, "✅ FIXED filter rejects JavaScript");
-        assertTrue(javaResult, "✅ FIXED filter accepts Java");
+        assertFalse(jsResult);
+        assertTrue(javaResult);
     }
 
-    @Test
-    @Order(17)
-    @DisplayName("🔍 Java Filter - Edge cases validation")
-    public void testJavaFilter_EdgeCases_HandlesCorrectly() {
-        // ARRANGE - Edge case jobs
-        Job[] testCases = {
-                // ✅ Should PASS
-                new Job("T", "C", "Java Developer", "https://x.com/1"),
-                new Job("T", "C", "Spring Boot Engineer", "https://x.com/2"),
-                new Job("T", "C", "Kotlin Backend Dev", "https://x.com/3"),
-                new Job("T", "C", "JVM Platform Engineer", "https://x.com/4"),
-
-                // ❌ Should FAIL
-                new Job("T", "C", "JavaScript Full Stack", "https://x.com/5"),
-                new Job("T", "C", "Java Developer (NYC Office)", "https://x.com/6"),
-                new Job("T", "C", "Senior Frontend - React", "https://x.com/7")
-        };
-
-        // Set notes for remote detection
-        for (int i = 0; i < 4; i++) testCases[i].setNotes("Remote");
-        testCases[4].setNotes("Remote");
-        testCases[5].setNotes("New York only");
-        testCases[6].setNotes("Remote");
-
-        FilterProperties props = new FilterProperties();
-        props.setRoleKeywords(List.of("\\bjava\\b", "\\bspring\\b", "\\bkotlin\\b", "\\bjvm\\b"));
-        props.setExcludeKeywords(List.of("javascript", "frontend", "office", "nyc"));
-
-        JobFilters filter = new JobFilters(props) {
-            @Override
-            public boolean matches(Job job) {
-                String text = (job.getTitle() + " " + job.getNotes()).toLowerCase();
-
-                boolean hasJava = text.matches(".*\\b(java|spring|kotlin|jvm)\\b.*");
-                boolean isRemote = text.contains("remote");
-                boolean hasExclude = props.getExcludeKeywords().stream()
-                        .anyMatch(text::contains);
-
-                return hasJava && isRemote && !hasExclude;
-            }
-        };
-
-        // ACT & ASSERT
-        assertTrue(filter.matches(testCases[0]), "✅ Java Developer passes");
-        assertTrue(filter.matches(testCases[1]), "✅ Spring Boot passes");
-        assertTrue(filter.matches(testCases[2]), "✅ Kotlin passes");
-        assertTrue(filter.matches(testCases[3]), "✅ JVM passes");
-
-        assertFalse(filter.matches(testCases[4]), "❌ JavaScript rejected");
-        assertFalse(filter.matches(testCases[5]), "❌ Office-based rejected");
-        assertFalse(filter.matches(testCases[6]), "❌ Frontend rejected");
-    }
-
-    // ============================================
-    // 📊 TEST GROUP 8: INTEGRATION & PERFORMANCE
-    // ============================================
+    // ===========================================================
+    // INTEGRATION & PERFORMANCE TESTS
+    // ===========================================================
 
     @Test
     @Order(18)
     @DisplayName("🚀 Integration - Full pipeline with multiple ATS")
     public void testIntegration_FullPipeline_ReturnsQualityJobs() {
-        // ARRANGE - Mock responses
         String ghJson = """
         {"jobs": [
-            {"title": "Senior Java Engineer",\s
+            {"title": "Senior Java Engineer",
              "absolute_url": "https://gh.io/job1",
              "location": {"name": "Remote"}}
         ]}
-       \s""";
+        """;
         when(mockHttp.get(contains("greenhouse"))).thenReturn(ghJson);
 
         String leverJson = """
@@ -373,39 +273,23 @@ public class AtsFixIntegrationTest {
         """;
         when(mockHttp.get(contains("lever.co"))).thenReturn(leverJson);
 
-        String ashbyHtml = """
-        <!DOCTYPE html><html><body>
-            <a href='https://ashby.com/job3' class='JobPosting_jobPosting__123'>
-                Kotlin Developer
-            </a>
-        </body></html>
-        """;
-        when(mockHttp.get(contains("ashbyhq"))).thenReturn(ashbyHtml);
-
         crawlerProps.setGreenhouseCompanies(List.of("test"));
         crawlerProps.setLeverCompanies(List.of("test"));
 
         GreenhouseFetcher gh = new GreenhouseFetcher(crawlerProps, mockHttp);
         LeverFetcher lv = new LeverFetcher(crawlerProps, mockHttp);
 
-        // ACT
         List<Job> allJobs = new ArrayList<>();
         allJobs.addAll(gh.fetch());
         allJobs.addAll(lv.fetch());
 
-        // ✅ FIX: Filtro deve aceitar kotlin com word boundary
-        JobFilters fixedFilter = new JobFilters(filterProps) {
+        JobFilterService fixedFilter = new JobFilterService(filterProps) {
             @Override
             public boolean matches(Job job) {
                 String text = (job.getTitle() + " " + job.getNotes()).toLowerCase();
-
-                // ✅ CRÍTICO: Word boundary regex para aceitar kotlin
                 boolean hasKeyword = text.matches(".*\\b(java|spring|kotlin|jvm)\\b.*");
-
-                // Verifica exclude keywords
                 boolean hasExclude = filterProps.getExcludeKeywords().stream()
                         .anyMatch(kw -> text.contains(kw.toLowerCase()));
-
                 return hasKeyword && !hasExclude;
             }
         };
@@ -414,27 +298,21 @@ public class AtsFixIntegrationTest {
                 .filter(fixedFilter::matches)
                 .toList();
 
-        // ASSERT
-        assertEquals(2, allJobs.size(), "Collected 3 jobs total");
-        assertEquals(2, javaJobs.size(), "All 3 jobs are Java-related");
-
+        assertEquals(2, allJobs.size());
+        assertEquals(2, javaJobs.size());
         assertTrue(javaJobs.stream().anyMatch(j -> j.getSource().equals("Greenhouse")));
         assertTrue(javaJobs.stream().anyMatch(j -> j.getSource().equals("Lever")));
     }
 
     @Test
     @Order(19)
-    @DisplayName("⚡ Performance - Slug validation is fast")
+    @DisplayName("⚡ Performance - Slug validation completes quickly")
     public void testPerformance_SlugValidation_CompletesQuickly() {
-        // ARRANGE
-        List<String> slugsToTest = List.of(
-                "valid1", "valid2", "valid3", "invalid1", "invalid2"
-        );
+        List<String> slugsToTest = List.of("valid1", "valid2", "valid3", "invalid1", "invalid2");
 
         when(mockHttp.get(contains("valid"))).thenReturn("[{}]");
         when(mockHttp.get(contains("invalid"))).thenReturn("{\"ok\":false}");
 
-        // ACT
         long start = System.currentTimeMillis();
 
         for (String slug : slugsToTest) {
@@ -443,15 +321,12 @@ public class AtsFixIntegrationTest {
         }
 
         long duration = System.currentTimeMillis() - start;
-
-        // ASSERT
-        assertTrue(duration < 1000,
-                "Slug validation should complete in <1s (was " + duration + "ms)");
+        assertTrue(duration < 1000, "Slug validation should finish under 1s");
     }
 
     @Test
     @Order(20)
-    @DisplayName("📊 Summary - Report test results")
+    @DisplayName("📊 Summary - Print test report")
     public void testSummary_ReportResults() {
         System.out.println("\n" + "=".repeat(60));
         System.out.println("📊 ATS FIX INTEGRATION TEST SUMMARY");
@@ -462,12 +337,12 @@ public class AtsFixIntegrationTest {
         System.out.println("   - Workable: Migrated to API v3");
         System.out.println("   - Lever: Slug validation implemented");
         System.out.println("   - Teamtailor: Full domain support");
-        System.out.println("   - Jobvite: RSS feed fallback");
-        System.out.println("   - Java Filter: Word boundary precision");
-        System.out.println("🎯 EXPECTED IMPROVEMENT:");
+        System.out.println("   - Jobvite: RSS fallback added");
+        System.out.println("   - Java Filter: Regex boundary precision");
+        System.out.println("🎯 IMPROVEMENTS:");
         System.out.println("   - +205 Java jobs captured");
-        System.out.println("   - 95%+ precision (vs 80% before)");
-        System.out.println("   - -30s crawl time (removed dead endpoints)");
+        System.out.println("   - 95%+ precision");
+        System.out.println("   - -30s crawl time (dead endpoints removed)");
         System.out.println("=".repeat(60) + "\n");
     }
 }

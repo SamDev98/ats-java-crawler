@@ -7,6 +7,23 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Unit tests for {@link Job} entity validation and edge cases.
+ *
+ * <p>Focus areas:
+ * <ul>
+ *   <li>URL validation and sanitization</li>
+ *   <li>Field trimming and null handling</li>
+ *   <li>equals() and hashCode() correctness</li>
+ *   <li>Default values for status, active flag, and date fields</li>
+ *   <li>Long notes handling behavior</li>
+ * </ul>
+ *
+ * <p>These tests ensure the {@code Job} model enforces data consistency
+ * before persistence and avoids invalid entity states.
+ *
+ * @since 0.4.1
+ */
 @DisplayName("Edge Cases - Job Entity & Business Rules")
 class JobEdgeCasesTest {
 
@@ -110,7 +127,7 @@ class JobEdgeCasesTest {
         Job job1 = new Job("Greenhouse", "Co", "Title1", "https://same.com/job");
         Job job2 = new Job("Lever", "Co2", "Title2", "https://same.com/job");
 
-        assertEquals(job1, job2, "Jobs com mesma URL devem ser iguais");
+        assertEquals(job1, job2, "Jobs with the same URL must be equal");
         assertEquals(job1.hashCode(), job2.hashCode());
     }
 
@@ -164,13 +181,13 @@ class JobEdgeCasesTest {
     }
 
     @Test
-    @DisplayName("❌ Notes > 2048 chars should be handled")
+    @DisplayName("❌ Notes > 2048 chars should be handled gracefully")
     void testJob_NotesTooLong_HandledGracefully() {
         String longNotes = "x".repeat(2500);
         validJob.setNotes(longNotes);
 
-        // App deve truncar ou lançar exceção - validar comportamento esperado
+        // The DB should reject if persisted, but the entity allows long text in memory.
         assertEquals(2500, validJob.getNotes().length(),
-                "App aceita notes longos, mas DB deve rejeitar no save()");
+                "Application allows long notes, DB constraint applies during save()");
     }
 }

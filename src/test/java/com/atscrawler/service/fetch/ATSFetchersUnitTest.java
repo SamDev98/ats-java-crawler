@@ -15,6 +15,20 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
+/**
+ * Unit tests for individual ATS fetchers (Greenhouse, Lever, Recruitee, BreezyHR).
+ *
+ * <p>Ensures:
+ * <ul>
+ *   <li>Correct JSON/HTML parsing for each source</li>
+ *   <li>Graceful handling of null or empty responses</li>
+ *   <li>Validation of URL extraction and title parsing</li>
+ * </ul>
+ *
+ * <p>Mocks network calls using {@link Http}.
+ *
+ * @since 0.4.2
+ */
 @DisplayName("Unit Tests - ATS Fetchers")
 class ATSFetchersUnitTest {
 
@@ -62,9 +76,7 @@ class ATSFetchersUnitTest {
     void testGreenhouse_EmptyCompanies_ReturnsEmpty() {
         props.setGreenhouseCompanies(List.of());
         GreenhouseFetcher fetcher = new GreenhouseFetcher(props, http);
-
         List<Job> jobs = fetcher.fetch();
-
         assertTrue(jobs.isEmpty());
     }
 
@@ -73,9 +85,7 @@ class ATSFetchersUnitTest {
     void testGreenhouse_NullCompanies_ReturnsEmpty() {
         props.setGreenhouseCompanies(null);
         GreenhouseFetcher fetcher = new GreenhouseFetcher(props, http);
-
         List<Job> jobs = fetcher.fetch();
-
         assertTrue(jobs.isEmpty());
     }
 
@@ -83,12 +93,9 @@ class ATSFetchersUnitTest {
     @DisplayName("❌ Greenhouse - HTML response skipped")
     void testGreenhouse_HTMLResponse_Skipped() {
         when(http.get(anyString())).thenReturn("<html>Not Found</html>");
-
         props.setGreenhouseCompanies(List.of("invalid"));
         GreenhouseFetcher fetcher = new GreenhouseFetcher(props, http);
-
         List<Job> jobs = fetcher.fetch();
-
         assertTrue(jobs.isEmpty());
     }
 
@@ -128,9 +135,7 @@ class ATSFetchersUnitTest {
 
         props.setLeverCompanies(List.of("invalid"));
         LeverFetcher fetcher = new LeverFetcher(props, http);
-
         List<Job> jobs = fetcher.fetch();
-
         assertTrue(jobs.isEmpty());
     }
 
@@ -197,12 +202,9 @@ class ATSFetchersUnitTest {
     @DisplayName("❌ BreezyHR - Empty HTML returns empty")
     void testBreezy_EmptyHTML_ReturnsEmpty() {
         when(http.get(anyString())).thenReturn("<html><body></body></html>");
-
         props.setBreezyCompanies(List.of("test"));
         BreezyFetcher fetcher = new BreezyFetcher(props, http);
-
         List<Job> jobs = fetcher.fetch();
-
         assertTrue(jobs.isEmpty());
     }
 }
